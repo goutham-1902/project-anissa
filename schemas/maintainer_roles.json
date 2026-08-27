@@ -2,16 +2,19 @@
   "GENERAL": {
     "name": "Project Anissa | General",
     "ledger": "general.json",
-    "responsibility": "Global architecture, releases and cross-module changes"
+    "responsibility": "Global architecture, cross-module changes and guarded public releases",
+    "publication_duty": "Generate, audit and push the allowlisted public projection after verification"
   },
   "ANISSA_MAINTAINER": {
     "name": "Project Anissa | Anissa Maintainer",
     "ledger": "anissa_maintainer.json",
-    "responsibility": "Anissa Core, roles, agendas and campaign gateway"
+    "responsibility": "Anissa Core, roles, agendas and campaign gateway",
+    "publication_duty": "Route verified public-safe fixes to General; keep private-instance and private-persona changes local"
   },
   "SOLDIERS_MAINTAINER": {
     "name": "Project Anissa | Soldiers Maintainer",
     "ledger": "soldiers_maintainer.json",
-    "responsibility": "A2A and future capability-scoped workers"
+    "responsibility": "A2A and future capability-scoped workers",
+    "publication_duty": "Route verified public-safe fixes to General; keep worker private state and private-instance changes local"
   }
 }

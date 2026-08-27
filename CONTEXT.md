@@ -9,3 +9,7 @@
 - **Projection**: a read-only normalized interface between components.
 - **Project Environment**: the resolved release/private-instance pairing.
 - **Private Instance**: external user-specific state and presentation.
+- **Public Projection**: the allowlisted, privacy-audited tree published from the
+  private development repository.
+- **Presentation Overlay**: private delivery preferences that cannot alter
+  factual logic or agenda state.

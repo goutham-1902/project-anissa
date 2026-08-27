@@ -34,3 +34,11 @@ inactivity and never becomes a false zero.
 Use code for IDs, deduplication, dates, arithmetic, state transitions and compact
 projections. Load only the policy and private-instance evidence required for the
 current workflow.
+
+## Maintainer publication
+
+Evaluate scope before execution. Every verified public-safe fix must be routed
+to the public release. Atomic maintainers hand publication to General; General
+alone generates, audits and pushes the allowlisted public projection. Never
+publish private-instance state, private presentation material or worker-private
+state.

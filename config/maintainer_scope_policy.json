@@ -44,5 +44,20 @@
       "exact": []
     }
   },
+  "publication": {
+    "publisher": "GENERAL",
+    "projection_builder": "tools/build_public_release.py",
+    "safety_gate": "tools/public_safety.py",
+    "eligibility": "ALLOWLIST_AND_SAFETY_GATE",
+    "excluded_state_roots": [
+      "brain/",
+      "persona/",
+      "profile/",
+      "runtime/",
+      "shared/",
+      "worker1/private/"
+    ],
+    "rule": "Every maintainer must route verified public-safe fixes into the public release. Atomic maintainers hand off publication to General; General alone generates, audits and pushes the allowlisted public projection. Private-instance and private-persona changes remain local."
+  },
   "rule": "Evaluate scope before execution. Atomic work stays with its owner; mixed or unknown scope defers to General. General may perform global or atomic maintenance."
 }

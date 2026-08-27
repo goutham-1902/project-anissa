@@ -69,6 +69,13 @@ class PublicRuntimeTests(unittest.TestCase):
         self.assertFalse(decision["accepted"])
         self.assertEqual(decision["defer_to"], "GENERAL")
 
+        route = governance.publication_route(
+            "SOLDIERS_MAINTAINER", ["worker1/src/sync.py"]
+        )
+        self.assertTrue(route["accepted"])
+        self.assertEqual(route["publisher"], "GENERAL")
+        self.assertEqual(route["action"], "HANDOFF_VERIFIED_CHANGE_TO_GENERAL")
+
 
 if __name__ == "__main__":
     unittest.main()

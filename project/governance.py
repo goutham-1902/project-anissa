@@ -45,6 +45,12 @@ class Governance:
         self.policy = _read_json(release / "config" / "maintainer_scope_policy.json")
         if set(self.roles) != set(MAINTAINER_IDS):
             raise RuntimeError("Maintainer role registry is invalid")
+        publication = self.policy.get("publication", {})
+        if publication.get("publisher") != "GENERAL":
+            raise RuntimeError("General must own the guarded public release seam")
+        for field in ("projection_builder", "safety_gate", "eligibility", "rule"):
+            if not str(publication.get(field) or "").strip():
+                raise RuntimeError(f"Publication policy is missing {field}")
 
     def ledger_path(self, maintainer_id: str) -> Path:
         self._require_maintainer(maintainer_id)
@@ -103,6 +109,29 @@ class Governance:
                 else f"Scope belongs to {natural_owner}; defer before execution."
             ),
             "owners": owners,
+        }
+
+    def publication_route(self, maintainer_id: str, files: list[str]) -> dict:
+        """Return the one guarded route from a verified change to GitHub."""
+        decision = self.evaluate_scope(maintainer_id, files)
+        publication = self.policy["publication"]
+        if not decision["accepted"]:
+            return {
+                **decision,
+                "publisher": publication["publisher"],
+                "action": "DEFER_SCOPE",
+            }
+        return {
+            **decision,
+            "publisher": publication["publisher"],
+            "action": (
+                "GENERATE_AUDIT_AND_PUSH"
+                if maintainer_id == publication["publisher"]
+                else "HANDOFF_VERIFIED_CHANGE_TO_GENERAL"
+            ),
+            "eligibility": publication["eligibility"],
+            "projection_builder": publication["projection_builder"],
+            "safety_gate": publication["safety_gate"],
         }
 
     def append_change(self, maintainer_id: str, writer_id: str, change: dict) -> dict:
