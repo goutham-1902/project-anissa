@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "mode": "clean",
+  "files": [
+    "identity.md",
+    "interaction.md"
+  ]
+}

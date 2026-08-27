@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "extraction_status": "COMPLETE",
+  "range_start": "ISO-8601 timestamp with offset",
+  "range_end": "ISO-8601 timestamp with offset",
+  "sessions": [
+    {
+      "id": "stable Forest record id when visible; otherwise deterministic UI fingerprint",
+      "start_at": "ISO-8601 timestamp with offset",
+      "end_at": "ISO-8601 timestamp with offset",
+      "tag": "work or study"
+    }
+  ]
+}

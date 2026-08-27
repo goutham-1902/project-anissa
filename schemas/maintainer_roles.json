@@ -1,0 +1,17 @@
+{
+  "GENERAL": {
+    "name": "Project Anissa | General",
+    "ledger": "general.json",
+    "responsibility": "Global architecture, releases and cross-module changes"
+  },
+  "ANISSA_MAINTAINER": {
+    "name": "Project Anissa | Anissa Maintainer",
+    "ledger": "anissa_maintainer.json",
+    "responsibility": "Anissa Core, roles, agendas and campaign gateway"
+  },
+  "SOLDIERS_MAINTAINER": {
+    "name": "Project Anissa | Soldiers Maintainer",
+    "ledger": "soldiers_maintainer.json",
+    "responsibility": "A2A and future capability-scoped workers"
+  }
+}

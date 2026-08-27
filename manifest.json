@@ -1,0 +1,9 @@
+{
+  "name": "Project Anissa",
+  "version": "2.5.0-dev.8",
+  "interface": "chat",
+  "default_mode": "SETUP",
+  "private_instance_required": true,
+  "go_live_required": true,
+  "raw_personal_documents_bundled": false
+}

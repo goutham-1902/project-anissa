@@ -1,0 +1,3 @@
+# Runtime workbook mutation dependency. Codex may choose an equivalent current local mechanism
+# if it can preserve the exact schema, locking, backups, formulas, validations and dedupe guarantees.
+openpyxl>=3.1,<4

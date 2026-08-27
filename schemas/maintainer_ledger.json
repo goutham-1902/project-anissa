@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "required_ledger_fields": [
+    "schema_version",
+    "maintainer_id",
+    "current_component_version",
+    "changes"
+  ],
+  "required_change_fields": [
+    "change_id",
+    "timestamp",
+    "base_version",
+    "target_version",
+    "scope",
+    "summary",
+    "files",
+    "verification",
+    "commit_sha",
+    "migration_id"
+  ],
+  "verification_status": "PASSED"
+}

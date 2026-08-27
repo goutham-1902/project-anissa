@@ -1,0 +1,23 @@
+{
+  "COMMAND": {
+    "name": "Anissa | Command",
+    "purpose": "Home interaction, strategy and major decisions.",
+    "policy_write": true,
+    "strategic_write": true,
+    "task_update": true
+  },
+  "WEEKDAY_OPS": {
+    "name": "Anissa | Weekday Ops",
+    "purpose": "Weekday execution and accountability.",
+    "policy_write": false,
+    "strategic_write": false,
+    "task_update": true
+  },
+  "WEEKEND": {
+    "name": "Anissa | Weekend",
+    "purpose": "Weekend deep work and weekly audit.",
+    "policy_write": false,
+    "strategic_write": "recommend_only",
+    "task_update": true
+  }
+}

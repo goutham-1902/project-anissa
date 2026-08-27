@@ -1,0 +1,30 @@
+{
+  "interface": "A2A work telemetry",
+  "version": 1,
+  "timezone": "Asia/Kolkata",
+  "operational_day": "[previous-date 20:00, date 20:00)",
+  "campaign_state": false,
+  "files": {
+    "worklog.csv": {
+      "grain": "one source slice or completed-task contribution per operational day",
+      "fields": [
+        "record_id",
+        "operational_date",
+        "window_start",
+        "window_end",
+        "category",
+        "minutes",
+        "source",
+        "source_record_id",
+        "source_tag",
+        "basis",
+        "started_at",
+        "ended_at"
+      ]
+    },
+    "status.json": {
+      "states": ["SETUP", "COMPLETE", "PARTIAL", "STALE", "FAILED"],
+      "rule": "Non-COMPLETE acquisition never replaces the last good work log with zero."
+    }
+  }
+}

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#656b70">
+  <title>Project Anissa // Work Console</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main>
+    <header class="masthead">
+      <div class="brand-lockup"><div>
+        <p class="eyebrow">PROJECT ANISSA · LOCAL TELEMETRY</p>
+        <h1>WORK CONSOLE</h1>
+        <p class="sub">Observed focus, execution credit and agenda state.</p>
+      </div></div>
+      <div class="health-block">
+        <div id="health" class="health">Loading telemetry…</div>
+        <p id="statusMeaning" class="status-meaning">Checking the latest confirmed import.</p>
+        <span id="coverage" class="coverage"></span>
+      </div>
+    </header>
+
+    <section class="kpis" id="kpis" aria-label="Key metrics"></section>
+    <section class="analytics-grid">
+      <article class="panel pie-panel">
+        <div class="panel-title"><div><p class="section-kicker">CURRENT WEEK</p><h2>Work distribution</h2></div><span id="weekTotal"></span></div>
+        <div class="pie-layout"><svg id="weeklyPie" class="pie" viewBox="0 0 220 220" role="img" aria-label="Weekly work distribution"></svg><div id="pieLegend" class="pie-legend"></div></div>
+        <p id="pieBasis" class="note"></p>
+      </article>
+      <article class="panel trend-panel">
+        <div class="panel-title"><div><p class="section-kicker">DAILY RECORD</p><h2>Focus and execution history</h2><p id="seriesRange" class="panel-subtitle"></p></div>
+          <div class="legend" id="legend" aria-label="Toggle chart categories">
+            <button type="button" data-category="Research" aria-pressed="true"><i class="research"></i>Research</button>
+            <button type="button" data-category="Study" aria-pressed="true"><i class="study"></i>Study</button>
+            <button type="button" data-category="Applications" aria-pressed="true"><i class="applications"></i>Applications</button>
+          </div>
+        </div>
+        <div class="chart-wrap" id="chartWrap"><svg id="chart" class="chart" role="img" aria-label="Stacked daily history"></svg><div id="tooltip" class="tooltip" role="status" aria-live="polite" hidden></div></div>
+        <div id="dayDetail" class="day-detail"></div><p id="basisNote" class="note"></p>
+      </article>
+    </section>
+    <section class="operations-grid">
+      <div class="queue-stack">
+        <article class="panel queue-panel execution-panel"><div class="panel-title"><div><p class="section-kicker">EXECUTION ORDER</p><h2>This week's plan</h2></div><span>scheduled + completed</span></div><div id="tasks" class="list"></div></article>
+        <article class="panel queue-panel application-panel"><div class="panel-title"><div><p class="section-kicker">ACTIVE ROUTES</p><h2>Current applications</h2></div><span>canonical workbook · read-only</span></div><div id="applications" class="list"></div></article>
+      </div>
+      <article class="verdict-panel panel" aria-labelledby="verdictTitle"><div class="verdict-content"><div class="panel-title"><div><p class="section-kicker">WEEKLY AUDIT</p><h2 id="verdictTitle">Weekly verdict</h2></div><span>workbook evidence</span></div><div id="verdict" class="verdict"></div></div></article>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

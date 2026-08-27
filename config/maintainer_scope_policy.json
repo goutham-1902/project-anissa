@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "default_owner": "GENERAL",
+  "owners": {
+    "GENERAL": {
+      "prefixes": [
+        ".github/",
+        "docs/",
+        "plans/",
+        "project/",
+        "schemas/",
+        "setup/",
+        "tools/"
+      ],
+      "exact": [
+        ".gitignore",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "CONTEXT.md",
+        "README.md",
+        "START_HERE.md",
+        "manifest.json",
+        "requirements.txt"
+      ]
+    },
+    "ANISSA_MAINTAINER": {
+      "prefixes": [
+        "anissa/",
+        "automation_specs/",
+        "chat_roles/",
+        "logic/",
+        "migrations/",
+        "persona/",
+        "profile/",
+        "prompts/"
+      ],
+      "exact": []
+    },
+    "SOLDIERS_MAINTAINER": {
+      "prefixes": [
+        "soldiers/",
+        "worker1/"
+      ],
+      "exact": []
+    }
+  },
+  "rule": "Evaluate scope before execution. Atomic work stays with its owner; mixed or unknown scope defers to General. General may perform global or atomic maintenance."
+}
