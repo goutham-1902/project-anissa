@@ -381,18 +381,29 @@ class WorkbookGateway:
         return self.upsert('WEEKLY_AUDITS','Audit ID',row),str(row['Audit ID'])
 
     def set_control(self, key: str, value: object):
+        self._set_controls(
+            {key: value},
+            event={'action':'set_control','key':key,'value':value},
+        )
+
+    def set_controls(self, values: dict[str, object]):
+        self._set_controls(values, event={'action':'set_controls','values':values})
+
+    def _set_controls(self, values: dict[str, object], *, event: dict):
+        if not values:
+            raise ValueError('At least one CONTROL value is required.')
         with exclusive_lock(self.lock_path):
             self._assert_mutation_allowed_locked()
             self._backup()
             wb=load_workbook(self.path); ws=wb['CONTROL']
-            found=False
-            for r in range(2,ws.max_row+1):
-                if ws.cell(r,1).value==key:
-                    ws.cell(r,2).value=value; found=True; break
-            if not found:
-                ws.append([key,value,'Added by runtime'])
+            rows={ws.cell(r,1).value:r for r in range(2,ws.max_row+1)}
+            for key,value in values.items():
+                if key in rows:
+                    ws.cell(rows[key],2).value=value
+                else:
+                    ws.append([key,value,'Added by runtime'])
             self._atomic_save(wb); wb.close()
-            self._log(self.events_path,{'action':'set_control','key':key,'value':value})
+            self._log(self.events_path,event)
 
     def set_task_status(self, task_id_value: str, status: str, *, evidence: str='', blocker: str='', unblock_action: str='', actual_minutes: int | None=None):
         with exclusive_lock(self.lock_path):

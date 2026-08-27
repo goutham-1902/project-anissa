@@ -20,6 +20,7 @@ def main() -> None:
             check=True,
         )
         environment = os.environ.copy()
+        environment["HOME"] = directory
         environment["PROJECT_ANISSA_INSTANCE"] = str(instance)
         subprocess.run(
             [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
