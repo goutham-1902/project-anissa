@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from project.environment import resolve_environment
+from project.reporting_week import reporting_week_for
 from project.telemetry_contract import TelemetryContractError, read_publication
 
 
@@ -166,7 +167,7 @@ def telemetry_context(workflow: str, *, shared_root: Path = SHARED_ROOT,
     current = _operational_date(now)
     calendar_today = now.date()
     week_end = calendar_today if workflow == "weekly-audit" else current
-    week_start = week_end - timedelta(days=week_end.weekday())
+    week_start = reporting_week_for(week_end).start
     today = _period(rows, current, current)
     recent_day = _period(rows, current - timedelta(days=1), current - timedelta(days=1))
     week = _period(rows, week_start, week_end)

@@ -8,6 +8,7 @@ from anissa.core import AnissaCore
 from logic.workbook_io import WorkbookGateway
 from project.environment import ProjectEnvironment
 from project.projections import AgendaProjection
+from project.reporting_week import ReportingWeek, previous_reporting_week, reporting_week_for
 from project.telemetry_contract import IST, operational_date, parse_moment, read_publication
 
 
@@ -148,6 +149,81 @@ def _weekly_distribution(totals: dict) -> dict:
     }
 
 
+def _coverage_intervals(status: dict) -> list[tuple[datetime, datetime]]:
+    raw = status.get("coverage_intervals") or []
+    if not raw and status.get("coverage_start") and status.get("coverage_through"):
+        raw = [{"start": status["coverage_start"], "end": status["coverage_through"]}]
+    intervals = []
+    for row in raw:
+        try:
+            start = parse_moment(row.get("start"))
+            end = parse_moment(row.get("end"))
+        except Exception:
+            continue
+        if end > start:
+            intervals.append((start, end))
+    return sorted(intervals)
+
+
+def _week_coverage(status: dict, week: ReportingWeek) -> str:
+    cursor = week.telemetry_start
+    overlap = False
+    for start, end in _coverage_intervals(status):
+        if end <= week.telemetry_start or start >= week.telemetry_end:
+            continue
+        overlap = True
+        if start > cursor:
+            return "partial"
+        cursor = max(cursor, end)
+        if cursor >= week.telemetry_end:
+            return "complete"
+    return "partial" if overlap else "pending"
+
+
+def _weekly_history(projection: AgendaProjection, rows: list[dict], status: dict) -> list[dict]:
+    audits = tuple(getattr(projection, "weekly_audits", ()))
+    if not audits and projection.latest_audit:
+        audits = (projection.latest_audit,)
+    history = []
+    for audit in audits[1:7]:
+        if not audit.week_start or not audit.week_end:
+            continue
+        week = reporting_week_for(audit.week_start)
+        if audit.week_end != week.end:
+            continue
+        totals = _totals(rows, week.start, week.end)
+        observed = round(
+            float(totals["research_minutes"]) + float(totals["study_minutes"]), 2
+        )
+        application_credit = float(totals["applications_minutes"])
+        history.append({
+            "week_start": week.start.isoformat(),
+            "week_end": week.end.isoformat(),
+            "audit": {
+                "audit_id": audit.audit_id,
+                "generated_at": str(audit.generated_at or "") or None,
+                "summary": audit.summary,
+                "strongest_achievement": audit.strongest_achievement,
+                "main_failure_pattern": audit.main_failure_pattern,
+                "next_priorities": audit.next_priorities,
+                "exact_next_action": audit.exact_next_action,
+                "effort_basis": audit.effort_basis,
+                "tasks_done": audit.tasks_done,
+                "tasks_assigned": audit.tasks_assigned,
+            },
+            "workload": {
+                **totals,
+                "observed_focus_minutes": observed,
+                "combined_workload_credit_minutes": round(observed + application_credit, 2),
+            },
+            "telemetry": {
+                "coverage": _week_coverage(status, week),
+                "coverage_through": status.get("coverage_through"),
+            },
+        })
+    return history
+
+
 def _weekly_tasks(projection: AgendaProjection, today: date) -> list[dict]:
     """Return the visible execution plan in scheduled order, not priority order."""
     week_start = today - timedelta(days=today.weekday())
@@ -254,15 +330,15 @@ def dashboard_snapshot(*, worklog_path: Path, status_path: Path,
                        now: datetime | None = None) -> dict:
     now = (now or datetime.now(IST)).astimezone(IST)
     today = operational_date(now)
+    calendar_today = now.date()
     publication = read_publication(worklog_path, status_path, retries=1)
     rows = publication.rows
     status = publication.status
     month_start = today.replace(day=1)
-    week_start = today - timedelta(days=today.weekday())
-    previous_week_end = week_start - timedelta(days=1)
-    previous_week_start = previous_week_end - timedelta(days=6)
+    reporting_week = reporting_week_for(calendar_today)
+    previous_week = previous_reporting_week(calendar_today)
     series_start, series_end = _series_window(rows, today)
-    week_totals = _totals(rows, week_start, today)
+    week_totals = _totals(rows, reporting_week.start, min(today, reporting_week.end))
     return {
         "generated_at": now.isoformat(timespec="seconds"),
         "operational_date": today.isoformat(),
@@ -270,7 +346,7 @@ def dashboard_snapshot(*, worklog_path: Path, status_path: Path,
         "today": _totals(rows, today, today),
         "week": week_totals,
         "weekly_distribution": _weekly_distribution(week_totals),
-        "previous_week": _totals(rows, previous_week_start, previous_week_end),
+        "previous_week": _totals(rows, previous_week.start, previous_week.end),
         "month": _totals(rows, month_start, today),
         "daily_series": _series(rows, series_end, (series_end - series_start).days + 1),
         "series_coverage": {
@@ -279,7 +355,8 @@ def dashboard_snapshot(*, worklog_path: Path, status_path: Path,
             "days": (series_end - series_start).days + 1,
             "anchor": "Forest operational dates" if any(str(row.get("source") or "") == "Forest" for row in rows) else "available worklog dates",
         },
-        "campaign": _campaign_snapshot(agenda_projection, today),
+        "campaign": _campaign_snapshot(agenda_projection, calendar_today),
+        "weekly_history": _weekly_history(agenda_projection, rows, status),
     }
 
 

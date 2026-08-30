@@ -152,6 +152,56 @@ function renderVerdict(audit) {
   root.innerHTML = `<p class="audit-period">${esc(humanDate(audit.week_start))} — ${esc(humanDate(audit.week_end))} · ${esc(audit.effort_basis || "recorded evidence")}</p><h3>${esc(score)}</h3>${audit.strongest_achievement ? `<div class="verdict-line"><span>Strongest achievement</span><p>${esc(audit.strongest_achievement)}</p></div>` : ""}${audit.main_failure_pattern ? `<div class="verdict-line"><span>Failure pattern</span><p>${esc(audit.main_failure_pattern)}</p></div>` : ""}<div class="next-command"><span>Next command</span><strong>${esc(audit.exact_next_action || audit.next_priorities || "No next action recorded")}</strong></div>${audit.summary ? `<details><summary>Full audit summary</summary><p>${esc(audit.summary)}</p></details>` : ""}`;
 }
 
+function telemetryCoverageState(entry) {
+  const coverage = entry?.telemetry?.coverage;
+  const raw = coverage && typeof coverage === "object" ? coverage.state : coverage;
+  const normalized = String(raw ?? "pending").trim().toLowerCase();
+  if (normalized === "complete") return "complete";
+  if (normalized === "partial") return "partial";
+  return "pending";
+}
+
+function historyCredit(value, coverage) {
+  if (coverage === "pending" || value === null || value === undefined || value === "") return "Pending";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return coverage === "partial" ? "Partial" : "Pending";
+  if (coverage === "partial") return numeric > 0 ? `${(numeric / 60).toFixed(1)} h · partial` : "Partial";
+  return mins(numeric);
+}
+
+function historyAuditLine(label, value) {
+  return value ? `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>` : "";
+}
+
+function weeklyHistoryMarkup(rows) {
+  if (!Array.isArray(rows) || !rows.length) return '<p class="empty">No completed weekly verdicts recorded.</p>';
+  return rows.slice(0, 6).map((entry, index) => {
+    const audit = entry.audit || {};
+    const workload = entry.workload || {};
+    const coverage = telemetryCoverageState(entry);
+    const score = audit.tasks_assigned
+      ? `${audit.tasks_done ?? "—"}/${audit.tasks_assigned} tasks done`
+      : "Weekly audit recorded";
+    const auditLines = [
+      historyAuditLine("Summary", audit.summary),
+      historyAuditLine("Strongest achievement", audit.strongest_achievement),
+      historyAuditLine("Failure pattern", audit.main_failure_pattern),
+      historyAuditLine("Next command", audit.exact_next_action || audit.next_priorities),
+    ].join("");
+    const totals = [
+      ["research", "Research", workload.research_minutes],
+      ["study", "Study", workload.study_minutes],
+      ["applications", "Applications", workload.applications_minutes],
+      ["combined", "Combined", workload.combined_workload_credit_minutes],
+    ].map(([className, label, value]) => `<div><dt><i class="${className}" aria-hidden="true"></i>${label}</dt><dd>${esc(historyCredit(value, coverage))}</dd></div>`).join("");
+    return `<article class="history-entry${index === 0 ? " newest" : ""}"><header class="history-heading"><div><p class="history-period">${esc(humanDate(entry.week_start))} — ${esc(humanDate(entry.week_end))} · ${esc(audit.effort_basis || "recorded evidence")}</p><h3>${esc(score)}</h3></div><span class="coverage-chip ${coverage}">Telemetry ${coverage}</span></header><div class="history-body"><dl class="history-totals" aria-label="Weekly workload credit">${totals}</dl><dl class="history-audit">${auditLines || '<div><dt>Audit</dt><dd>No narrative facts recorded.</dd></div>'}</dl></div></article>`;
+  }).join("");
+}
+
+function renderWeeklyHistory(rows) {
+  document.querySelector("#weeklyHistory").innerHTML = weeklyHistoryMarkup(rows);
+}
+
 function renderApplications(rows) {
   document.querySelector("#applications").innerHTML = rows.length ? rows.map(row => `<div class="item application-item"><div><div class="item-topline"><strong>${esc(row.programme || "Untitled application")}</strong><span class="status-chip">${esc(row.status)}</span></div><p>${esc(row.institution)} · ${esc(row.route || "Route unrecorded")} · ${esc(row.cycle || "Cycle unrecorded")}</p><p>${esc(row.funding_status || row.funding_gate || "Funding unrecorded")}</p><p class="next-action">${esc(row.next_action || "No next action recorded")}</p></div><span class="deadline"><strong>${esc(humanDate(row.deadline))}</strong><small>${esc(relativeDay(row.days_to_deadline))}</small></span></div>`).join("") : '<div class="empty">No active applications recorded.</div>';
 }
@@ -199,12 +249,19 @@ async function load() {
     renderKpis(data); renderChart(); renderPie(data.weekly_distribution);
     renderVerdict(data.campaign.latest_weekly_audit);
     renderApplications(data.campaign.applications); renderTasks(data.campaign.weekly_plan);
+    renderWeeklyHistory(data.weekly_history);
   } catch (error) {
     health.className = "health bad";
     health.textContent = `Dashboard error · ${error.message}`;
   }
 }
 
-bindControls();
-load();
-setInterval(load, 60000);
+if (typeof document !== "undefined") {
+  bindControls();
+  load();
+  setInterval(load, 60000);
+}
+
+if (typeof module !== "undefined") {
+  module.exports = {historyCredit, telemetryCoverageState, weeklyHistoryMarkup};
+}

@@ -134,6 +134,7 @@ class AgendaProjection:
     workload_events: tuple[WorkloadEventProjection, ...]
     audit: AuditProjection
     latest_audit: WeeklyAuditRecordProjection | None
+    weekly_audits: tuple[WeeklyAuditRecordProjection, ...]
     completed_task_credit: tuple[CompletedTaskCreditProjection, ...]
     _compatibility_payload: Mapping[str, object]
 

@@ -16,12 +16,14 @@ from project.projections import (
     WeeklyAuditRecordProjection,
     WorkloadEventProjection,
 )
+from project.reporting_week import reporting_week_for
 
 
 AGENDA_ID = "graduate_applications"
 OPEN_TASKS = {"Not Started", "Started", "Blocked"}
 ACTIVE_APPLICATIONS = {"Researching", "Preparing", "Applying", "Submitted", "Interview", "Offer"}
 PRIORITY = {"Urgent": 0, "High": 1, "Medium": 2, "Low": 3}
+WEEKLY_AUDIT_HISTORY_LIMIT = 7
 
 
 def _optional_float(value: object) -> float | None:
@@ -87,6 +89,24 @@ def _compact_task(row: dict, *, include_definition: bool = False) -> dict:
     if include_definition:
         result["definition_of_done"] = row.get("Definition of Done")
     return result
+
+
+def _weekly_audit_projection(row: dict) -> WeeklyAuditRecordProjection:
+    return WeeklyAuditRecordProjection(
+        agenda_id=AGENDA_ID,
+        audit_id=str(row.get("Audit ID") or ""),
+        week_start=date_value(row.get("Week Start")),
+        week_end=date_value(row.get("Week End")),
+        generated_at=_datetime_value(row.get("Generated At")),
+        summary=str(row.get("Summary") or ""),
+        strongest_achievement=str(row.get("Strongest Achievement") or ""),
+        main_failure_pattern=str(row.get("Main Failure Pattern") or ""),
+        next_priorities=str(row.get("Next Priorities") or ""),
+        exact_next_action=str(row.get("Exact Next Action") or ""),
+        effort_basis=str(row.get("Effort Basis") or ""),
+        tasks_done=int(float(row.get("Tasks Done") or 0)),
+        tasks_assigned=int(float(row.get("Tasks Assigned") or 0)),
+    )
 
 
 class GraduateApplicationsAgenda:
@@ -157,8 +177,9 @@ class GraduateApplicationsAgenda:
 
     def weekly_metrics(self, today: date | None = None, *, state: dict | None = None) -> dict:
         today = today or self._today()
-        week_start = today - timedelta(days=today.weekday())
-        week_end = week_start + timedelta(days=6)
+        reporting_week = reporting_week_for(today)
+        week_start = reporting_week.start
+        week_end = reporting_week.end
         state = state or self.gateway.read_bundle("TASKS", "APPLICATIONS", "BUDGET")
         tasks = state["TASKS"]
         applications = state["APPLICATIONS"]
@@ -325,7 +346,7 @@ class GraduateApplicationsAgenda:
                 if value.strip()
             ),
         ) for row in active_events)
-        audits = sorted(
+        audit_rows = sorted(
             state["WEEKLY_AUDITS"],
             key=lambda row: (
                 date_value(row.get("Week Start")) or date.min,
@@ -333,24 +354,11 @@ class GraduateApplicationsAgenda:
             ),
             reverse=True,
         )
-        latest_audit = None
-        if audits:
-            row = audits[0]
-            latest_audit = WeeklyAuditRecordProjection(
-                agenda_id=self.agenda_id,
-                audit_id=str(row.get("Audit ID") or ""),
-                week_start=date_value(row.get("Week Start")),
-                week_end=date_value(row.get("Week End")),
-                generated_at=_datetime_value(row.get("Generated At")),
-                summary=str(row.get("Summary") or ""),
-                strongest_achievement=str(row.get("Strongest Achievement") or ""),
-                main_failure_pattern=str(row.get("Main Failure Pattern") or ""),
-                next_priorities=str(row.get("Next Priorities") or ""),
-                exact_next_action=str(row.get("Exact Next Action") or ""),
-                effort_basis=str(row.get("Effort Basis") or ""),
-                tasks_done=int(float(row.get("Tasks Done") or 0)),
-                tasks_assigned=int(float(row.get("Tasks Assigned") or 0)),
-            )
+        weekly_audits = tuple(
+            _weekly_audit_projection(row)
+            for row in audit_rows[:WEEKLY_AUDIT_HISTORY_LIMIT]
+        )
+        latest_audit = weekly_audits[0] if weekly_audits else None
         completed_credit = []
         for row in state["TASKS"]:
             if str(row.get("Status") or "") != "Done" or not row.get("Task ID"):
@@ -392,6 +400,7 @@ class GraduateApplicationsAgenda:
                 effort_basis=metrics["effort_basis"],
             ),
             latest_audit=latest_audit,
+            weekly_audits=weekly_audits,
             completed_task_credit=tuple(completed_credit),
             compatibility_payload=compatibility,
         )

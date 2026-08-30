@@ -50,6 +50,13 @@ class PublicRuntimeTests(unittest.TestCase):
         self.assertNotIn("WorkbookGateway", text)
         self.assertNotIn("anissa.agendas", text)
 
+    def test_dashboard_includes_bounded_weekly_history_without_private_assets(self):
+        index = (RELEASE_ROOT / "worker1" / "dashboard" / "index.html").read_text()
+        app = (RELEASE_ROOT / "worker1" / "dashboard" / "app.js").read_text()
+        self.assertIn('id="weeklyHistory"', index)
+        self.assertIn("weekly_history", app)
+        self.assertNotIn("anissa-verdict.png", index)
+
     def test_private_instance_and_clean_presentation_are_separate(self):
         self.assertFalse((RELEASE_ROOT / "brain").exists())
         self.assertFalse((RELEASE_ROOT / "profile").exists())
