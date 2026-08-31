@@ -42,3 +42,9 @@ to the public release. Atomic maintainers hand publication to General; General
 alone generates, audits and pushes the allowlisted public projection. Never
 publish private-instance state, private presentation material or worker-private
 state.
+
+Git history, not duplicate source trees or tracked bytecode, preserves code
+versions. After every verified code maintenance change, run the configured
+dashboard freshness command and require its reported build ID to match the
+current checkout before declaring deployment complete. It may replace only a
+process verified as A2A-owned.

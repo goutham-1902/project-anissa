@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,6 +20,48 @@ MIME = {
     ".jpeg": "image/jpeg",
     ".svg": "image/svg+xml",
 }
+
+BUILD_INPUTS = (
+    "anissa/**/*.py",
+    "logic/**/*.py",
+    "project/**/*.py",
+    "worker1/a2a_cli.py",
+    "worker1/src/**/*.py",
+    "worker1/dashboard/*.html",
+    "worker1/dashboard/*.css",
+    "worker1/dashboard/*.js",
+)
+
+
+def dashboard_build_id(release_root: Path) -> str:
+    """Identify the exact release code and static UI loaded by the dashboard."""
+    root = Path(release_root).resolve()
+    files = {
+        path.resolve()
+        for pattern in BUILD_INPUTS
+        for path in root.glob(pattern)
+        if (
+            path.is_file()
+            and "__pycache__" not in path.parts
+            and "tests" not in path.relative_to(root).parts
+        )
+    }
+    digest = hashlib.sha256()
+    for path in sorted(files):
+        digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()[:16]
+
+
+def dashboard_health(build_id: str) -> dict:
+    return {
+        "ok": True,
+        "service": "a2a-dashboard",
+        "build_id": build_id,
+        "pid": os.getpid(),
+    }
 
 
 def resolve_static_path(
@@ -40,7 +84,9 @@ def resolve_static_path(
 
 
 def make_handler(*, static_root: Path, worklog_path: Path, status_path: Path,
-                 environment: ProjectEnvironment):
+                 environment: ProjectEnvironment, build_id: str | None = None):
+    runtime_build_id = build_id or dashboard_build_id(environment.release_root)
+
     class DashboardHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             return
@@ -56,7 +102,8 @@ def make_handler(*, static_root: Path, worklog_path: Path, status_path: Path,
         def do_GET(self):
             path = urlparse(self.path).path
             if path == "/health":
-                self._send(200, b'{"ok":true}\n', "application/json; charset=utf-8")
+                payload = json.dumps(dashboard_health(runtime_build_id)).encode("utf-8")
+                self._send(200, payload, "application/json; charset=utf-8")
                 return
             if path == "/api/dashboard":
                 try:
@@ -94,6 +141,7 @@ def run_server(*, host: str, port: int, static_root: Path, worklog_path: Path,
     handler = make_handler(
         static_root=static_root, worklog_path=worklog_path,
         status_path=status_path, environment=environment,
+        build_id=dashboard_build_id(environment.release_root),
     )
     server = ThreadingHTTPServer((host, port), handler)
     server.serve_forever()

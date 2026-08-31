@@ -11,6 +11,7 @@ from logic.workbook_io import WorkbookGateway
 from project.environment import RELEASE_ROOT, resolve_environment
 from project.governance import Governance
 from project.telemetry_contract import read_publication
+from worker1.src.dashboard_server import dashboard_build_id, dashboard_health
 
 
 class PublicRuntimeTests(unittest.TestCase):
@@ -56,6 +57,13 @@ class PublicRuntimeTests(unittest.TestCase):
         self.assertIn('id="weeklyHistory"', index)
         self.assertIn("weekly_history", app)
         self.assertNotIn("anissa-verdict.png", index)
+
+    def test_dashboard_health_identifies_the_current_release_build(self):
+        build_id = dashboard_build_id(RELEASE_ROOT)
+        health = dashboard_health(build_id)
+        self.assertEqual(health["service"], "a2a-dashboard")
+        self.assertEqual(health["build_id"], build_id)
+        self.assertEqual(len(build_id), 16)
 
     def test_private_instance_and_clean_presentation_are_separate(self):
         self.assertFalse((RELEASE_ROOT / "brain").exists())

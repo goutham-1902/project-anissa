@@ -38,7 +38,7 @@ the external instance and never commit that instance.
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python tools/verify.py
+.venv/bin/python -B tools/verify.py
 ```
 
 The verifier creates a temporary synthetic SETUP instance. It does not activate
@@ -63,3 +63,8 @@ execution. Every verified public-safe fix must reach the public release. Atomic
 maintainers hand it to General, who alone generates the allowlisted projection,
 runs the privacy audit and pushes it. Private-instance, private-persona and
 worker-private changes remain local.
+
+Git preserves code history; keep only current source in the checkout. After a
+verified maintenance update, run `python -B worker1/a2a_cli.py ensure-server`.
+The command compares `/health` with the current release build ID, replaces only
+an A2A-owned stale process, and reports the deployed build ID.

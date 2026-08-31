@@ -4,7 +4,9 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
@@ -17,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 from project.environment import resolve_environment
 from project.a2a_workflow import run_a2a_csv_sync, run_a2a_sync
 from project.dashboard import compose_dashboard
-from worker1.src.dashboard_server import run_server
+from worker1.src.dashboard_server import dashboard_build_id, run_server
 from worker1.src.forest_csv import decode_csv_base64
 from worker1.src.sync import load_payload, record_failure, record_stale
 
@@ -41,12 +43,52 @@ def _paths(args) -> dict:
     }
 
 
-def _healthy(host: str, port: int, timeout: float = 2.0) -> bool:
+def _health(host: str, port: int, timeout: float = 2.0) -> dict | None:
     try:
         with urlopen(f"http://{host}:{port}/health", timeout=timeout) as response:
-            return response.status == 200 and json.loads(response.read()).get("ok") is True
+            payload = json.loads(response.read())
+            return payload if response.status == 200 and payload.get("ok") is True else None
     except Exception:
-        return False
+        return None
+
+
+def _dashboard_process_command(pid: int) -> str:
+    result = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "command="],
+        check=False, capture_output=True, text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _owned_dashboard_pid(health: dict, pid_path: Path) -> int | None:
+    candidates = [health.get("pid")]
+    try:
+        candidates.append(pid_path.read_text(encoding="utf-8").strip())
+    except OSError:
+        pass
+    expected_cli = str(Path(__file__).resolve())
+    for value in candidates:
+        try:
+            pid = int(value)
+        except (TypeError, ValueError):
+            continue
+        command = _dashboard_process_command(pid)
+        if expected_cli in command and " serve " in f" {command} ":
+            return pid
+    return None
+
+
+def _stop_dashboard(pid: int, host: str, port: int, timeout: float = 5.0) -> bool:
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return _health(host, port) is None
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _health(host, port, timeout=0.25) is None:
+            return True
+        time.sleep(0.1)
+    return False
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -78,7 +120,10 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8765)
 
-    ensure = sub.add_parser("ensure-server", help="Start the dashboard when its health endpoint is down")
+    ensure = sub.add_parser(
+        "ensure-server",
+        help="Start the dashboard or replace an A2A-owned stale build",
+    )
     ensure.add_argument("--host", default="127.0.0.1")
     ensure.add_argument("--port", type=int, default=8765)
     ensure.add_argument("--wait-seconds", type=float, default=5.0)
@@ -140,27 +185,65 @@ def main(argv=None) -> int:
         )
         return 0
     if args.command == "ensure-server":
-        if _healthy(args.host, args.port):
-            print(json.dumps({"state": "running", "url": f"http://{args.host}:{args.port}/"}))
+        current_build = dashboard_build_id(ROOT)
+        private_root = paths["store_path"].parent
+        health = _health(args.host, args.port)
+        if (
+            health
+            and health.get("service") == "a2a-dashboard"
+            and health.get("build_id") == current_build
+        ):
+            print(json.dumps({
+                "state": "running", "url": f"http://{args.host}:{args.port}/",
+                "build_id": current_build, "pid": health.get("pid"),
+            }))
             return 0
-        PRIVATE.mkdir(parents=True, exist_ok=True)
-        log = (PRIVATE / "dashboard.log").open("ab")
+        state = "started"
+        previous_build = health.get("build_id") if health else None
+        if health:
+            pid_path = private_root / "dashboard.pid"
+            pid = _owned_dashboard_pid(health, pid_path)
+            if pid is None or not _stop_dashboard(pid, args.host, args.port):
+                print(json.dumps({
+                    "state": "blocked",
+                    "message": "Port is occupied by a process that cannot be safely replaced",
+                    "expected_build_id": current_build,
+                    "observed_build_id": previous_build,
+                }), file=sys.stderr)
+                return 1
+            state = "restarted"
+        private_root.mkdir(parents=True, exist_ok=True)
+        log = (private_root / "dashboard.log").open("ab")
         command = [
-            sys.executable, str(Path(__file__).resolve()), "serve",
+            sys.executable, "-B", str(Path(__file__).resolve()), "serve",
             "--host", args.host, "--port", str(args.port),
             "--worklog-path", str(paths["worklog_path"]),
             "--status-path", str(paths["status_path"]),
             "--static-root", str(paths["static_root"]),
         ]
         process = subprocess.Popen(command, stdout=log, stderr=log, start_new_session=True)
-        (PRIVATE / "dashboard.pid").write_text(str(process.pid), encoding="utf-8")
+        log.close()
+        (private_root / "dashboard.pid").write_text(str(process.pid), encoding="utf-8")
         deadline = time.monotonic() + args.wait_seconds
         while time.monotonic() < deadline:
-            if _healthy(args.host, args.port):
-                print(json.dumps({"state": "started", "pid": process.pid, "url": f"http://{args.host}:{args.port}/"}))
+            started_health = _health(args.host, args.port)
+            if (
+                started_health
+                and started_health.get("service") == "a2a-dashboard"
+                and started_health.get("build_id") == current_build
+            ):
+                print(json.dumps({
+                    "state": state, "pid": process.pid,
+                    "url": f"http://{args.host}:{args.port}/",
+                    "build_id": current_build,
+                    "previous_build_id": previous_build,
+                }))
                 return 0
             time.sleep(0.2)
-        print(json.dumps({"state": "failed", "pid": process.pid}), file=sys.stderr)
+        print(json.dumps({
+            "state": "failed", "pid": process.pid,
+            "expected_build_id": current_build,
+        }), file=sys.stderr)
         return 1
     return 2
 

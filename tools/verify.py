@@ -15,7 +15,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as directory:
         instance = Path(directory) / "instance"
         subprocess.run(
-            [sys.executable, "tools/init_instance.py", str(instance)],
+            [sys.executable, "-B", "tools/init_instance.py", str(instance)],
             cwd=ROOT,
             check=True,
         )
@@ -23,13 +23,13 @@ def main() -> None:
         environment["HOME"] = directory
         environment["PROJECT_ANISSA_INSTANCE"] = str(instance)
         subprocess.run(
-            [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
+            [sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests", "-v"],
             cwd=ROOT,
             env=environment,
             check=True,
         )
         subprocess.run(
-            [sys.executable, "tools/preflight.py"],
+            [sys.executable, "-B", "tools/preflight.py"],
             cwd=ROOT,
             env=environment,
             check=True,
