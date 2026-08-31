@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Callable
 
+from logic.ids import weekly_audit_id
 from logic.workbook_io import WorkbookGateway
 from logic.workload import date_value, replan_preview, task_remaining_minutes
 from project.environment import ProjectEnvironment
@@ -16,7 +17,11 @@ from project.projections import (
     WeeklyAuditRecordProjection,
     WorkloadEventProjection,
 )
-from project.reporting_week import reporting_week_for
+from project.reporting_week import (
+    ReportingWeek,
+    reporting_week_for,
+    resolve_closed_reporting_week,
+)
 
 
 AGENDA_ID = "graduate_applications"
@@ -277,7 +282,13 @@ class GraduateApplicationsAgenda:
             "achievement_candidates": achievements,
         }
 
-    def projection(self, workflow: str, *, expected_control: dict | None = None) -> AgendaProjection:
+    def projection(
+        self,
+        workflow: str,
+        *,
+        expected_control: dict | None = None,
+        audit_week: ReportingWeek | None = None,
+    ) -> AgendaProjection:
         state = self.gateway.read_bundle(
             "CONTROL", "TASKS", "APPLICATIONS", "WORKLOAD_EVENTS", "BUDGET",
             "SEARCH_HISTORY", "SOURCE_HEALTH", "WEEKLY_AUDITS",
@@ -285,8 +296,22 @@ class GraduateApplicationsAgenda:
         if expected_control is not None and state["CONTROL"] != expected_control:
             raise RuntimeError("Agenda state changed while preparing its projection")
         today = self._today()
-        compatibility = self._snapshot(workflow, state=state, today=today)
-        metrics = self.weekly_metrics(today, state=state)
+        target_week = (
+            audit_week or resolve_closed_reporting_week()
+            if workflow == "weekly-audit"
+            else None
+        )
+        metrics = self.weekly_metrics(
+            target_week.end if target_week is not None else today,
+            state=state,
+        )
+        compatibility = self._snapshot(
+            workflow,
+            state=state,
+            today=today,
+            audit_metrics=metrics,
+            audit_week=target_week,
+        )
         tasks = tuple(TaskProjection(
             agenda_id=self.agenda_id,
             task_id=str(row.get("Task ID") or ""),
@@ -405,7 +430,15 @@ class GraduateApplicationsAgenda:
             compatibility_payload=compatibility,
         )
 
-    def _snapshot(self, workflow: str, *, state: dict, today: date) -> dict:
+    def _snapshot(
+        self,
+        workflow: str,
+        *,
+        state: dict,
+        today: date,
+        audit_metrics: dict | None = None,
+        audit_week: ReportingWeek | None = None,
+    ) -> dict:
         control = state["CONTROL"]
         tasks = state["TASKS"]
         applications = state["APPLICATIONS"]
@@ -457,9 +490,23 @@ class GraduateApplicationsAgenda:
             return result
 
         if workflow == "weekly-audit":
+            metrics = audit_metrics or self.weekly_metrics(today, state=state)
+            target = audit_week or reporting_week_for(
+                date.fromisoformat(metrics["week_end"])
+            )
+            existing = next((
+                row for row in state["WEEKLY_AUDITS"]
+                if date_value(row.get("Week Start")) == target.start
+            ), None)
             return {
                 **base,
-                "metrics": self.weekly_metrics(today, state=state),
+                "audit_target": {
+                    "week_start": target.start.isoformat(),
+                    "week_end": target.end.isoformat(),
+                    "audit_id": weekly_audit_id(target.start),
+                },
+                "audit_recorded": existing is not None,
+                "metrics": metrics,
                 "active_workload_events": active_events,
             }
 
@@ -577,14 +624,26 @@ class GraduateApplicationsAgenda:
     def record_weekly_audit(
         self,
         *,
+        week_ending: date,
+        as_of: datetime | None = None,
         strongest_achievement: str = "",
         failure_pattern: str = "",
         next_priorities: str = "",
         exact_next_action: str,
         summary: str = "",
     ) -> tuple[str, dict]:
-        metrics = self.weekly_metrics()
+        target = resolve_closed_reporting_week(week_ending, as_of=as_of)
+        state = self.gateway.read_bundle(
+            "TASKS", "APPLICATIONS", "BUDGET", "WEEKLY_AUDITS"
+        )
+        metrics = self.weekly_metrics(target.end, state=state)
+        if any(
+            date_value(row.get("Week Start")) == target.start
+            for row in state["WEEKLY_AUDITS"]
+        ):
+            return "existing", metrics
         row = {
+            "Audit ID": weekly_audit_id(target.start),
             "Week Start": metrics["week_start"],
             "Week End": metrics["week_end"],
             "Tasks Assigned": metrics["tasks_assigned"],

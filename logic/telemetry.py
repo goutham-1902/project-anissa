@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from project.environment import resolve_environment
-from project.reporting_week import reporting_week_for
+from project.reporting_week import ReportingWeek, reporting_week_for
 from project.telemetry_contract import TelemetryContractError, read_publication
 
 
@@ -155,10 +155,17 @@ def _compact_period(period: dict, *, detailed: bool = False) -> dict:
     return {key: period[key] for key in keys}
 
 
-def telemetry_context(workflow: str, *, shared_root: Path = SHARED_ROOT,
-                      now: datetime | None = None) -> dict:
+def telemetry_context(
+    workflow: str,
+    *,
+    shared_root: Path = SHARED_ROOT,
+    now: datetime | None = None,
+    reporting_week: ReportingWeek | None = None,
+) -> dict:
     """Return the only compact A2A context Anissa is allowed to consume."""
     now = (now or datetime.now(IST)).astimezone(IST)
+    if reporting_week is not None and workflow != "weekly-audit":
+        raise ValueError("A reporting-week override is valid only for weekly audits.")
     loaded = _read_contract(Path(shared_root), now)
     if isinstance(loaded, dict):
         return loaded
@@ -166,8 +173,16 @@ def telemetry_context(workflow: str, *, shared_root: Path = SHARED_ROOT,
 
     current = _operational_date(now)
     calendar_today = now.date()
-    week_end = calendar_today if workflow == "weekly-audit" else current
-    week_start = reporting_week_for(week_end).start
+    week_end = (
+        reporting_week.end
+        if reporting_week is not None
+        else calendar_today if workflow == "weekly-audit" else current
+    )
+    week_start = (
+        reporting_week.start
+        if reporting_week is not None
+        else reporting_week_for(week_end).start
+    )
     today = _period(rows, current, current)
     recent_day = _period(rows, current - timedelta(days=1), current - timedelta(days=1))
     week = _period(rows, week_start, week_end)
@@ -205,4 +220,21 @@ def telemetry_context(workflow: str, *, shared_root: Path = SHARED_ROOT,
     }
     if workflow not in {"weekday-reminder", "weekend-reminder"}:
         result["week"] = _compact_period(week, detailed=detailed)
+    if reporting_week is not None:
+        coverage = _parse_moment(base["coverage_through"])
+        coverage_state = (
+            "complete"
+            if coverage >= reporting_week.telemetry_end
+            else "pending"
+            if coverage <= reporting_week.telemetry_start
+            else "partial"
+        )
+        result["reporting_week"] = {
+            "start": reporting_week.start.isoformat(),
+            "end": reporting_week.end.isoformat(),
+            "coverage": coverage_state,
+        }
+        if coverage_state != "complete":
+            result["data_policy"] = "positive_only"
+            result["guardrail"] = "positive_only"
     return result

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date
+from datetime import date, datetime
 import json
 from pathlib import Path
 import sys
@@ -36,9 +36,22 @@ def compact_snapshot(
     workflow: str,
     *,
     environment: ProjectEnvironment | None = None,
+    week_ending: date | None = None,
+    as_of: datetime | None = None,
 ) -> dict:
     """Compatibility interface retained for role prompts and existing tests."""
-    return _core(gateway, environment).snapshot(workflow)
+    return _core(gateway, environment).snapshot(
+        workflow,
+        week_ending=week_ending,
+        as_of=as_of,
+    )
+
+
+def _iso_date(value: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("expected an ISO date (YYYY-MM-DD)") from exc
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -58,6 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
             "weekend-reminder", "weekly-audit", "plan-impact",
         ],
     )
+    snapshot.add_argument("--week-ending", type=_iso_date)
     task_status = commands.add_parser("set-task-status")
     task_status.add_argument("task_id")
     task_status.add_argument("status")
@@ -78,6 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_command.add_argument("--changes-json", default="[]")
     apply_command.add_argument("--confirm", required=True)
     audit = commands.add_parser("record-weekly-audit")
+    audit.add_argument("--week-ending", type=_iso_date, required=True)
     audit.add_argument("--strongest-achievement", default="")
     audit.add_argument("--failure-pattern", default="")
     audit.add_argument("--next-priorities", default="")
@@ -102,7 +117,10 @@ def main(argv=None) -> int:
         if result is None:
             raise SystemExit(f"Unknown task: {args.task_id}")
     elif args.cmd == "snapshot":
-        result = core.snapshot(args.workflow)
+        try:
+            result = core.snapshot(args.workflow, week_ending=args.week_ending)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
     elif args.cmd == "set-task-status":
         agenda.set_task_status(
             args.task_id,
@@ -131,13 +149,17 @@ def main(argv=None) -> int:
                 raise SystemExit("Exact --confirm APPLY_APPROVED_REPLAN is required.")
             result = agenda.apply_replan(event, changes)
     elif args.cmd == "record-weekly-audit":
-        action, metrics = agenda.record_weekly_audit(
-            strongest_achievement=args.strongest_achievement,
-            failure_pattern=args.failure_pattern,
-            next_priorities=args.next_priorities,
-            exact_next_action=args.exact_next_action,
-            summary=args.summary,
-        )
+        try:
+            action, metrics = agenda.record_weekly_audit(
+                week_ending=args.week_ending,
+                strongest_achievement=args.strongest_achievement,
+                failure_pattern=args.failure_pattern,
+                next_priorities=args.next_priorities,
+                exact_next_action=args.exact_next_action,
+                summary=args.summary,
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
         result = {"action": action, "metrics": metrics}
     else:
         return 2

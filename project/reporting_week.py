@@ -52,3 +52,22 @@ def completed_reporting_week(moment: datetime) -> ReportingWeek:
     if local >= current.telemetry_end:
         return current
     return previous_reporting_week(current.start)
+
+
+def resolve_closed_reporting_week(
+    week_ending: date | None = None,
+    *,
+    as_of: datetime | None = None,
+) -> ReportingWeek:
+    """Resolve one immutable, already-closed week for an audit operation."""
+
+    moment = _local_moment(as_of or datetime.now(IST))
+    latest = completed_reporting_week(moment)
+    if week_ending is None:
+        return latest
+    if week_ending.weekday() != 6:
+        raise ValueError("Weekly audit targets must end on Sunday.")
+    requested = reporting_week_for(week_ending)
+    if requested.telemetry_end > moment:
+        raise ValueError("Weekly audit target is still open or lies in the future.")
+    return requested

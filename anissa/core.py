@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 import json
 from typing import Callable
 
@@ -12,6 +12,8 @@ from logic.telemetry import telemetry_context
 from logic.workbook_io import WorkbookGateway
 from project.environment import ProjectEnvironment
 from project.projections import AgendaProjection
+from project.reporting_week import resolve_closed_reporting_week
+from project.telemetry_contract import IST
 
 
 PERMANENT_ROLE_IDS = ("COMMAND", "WEEKDAY_OPS", "WEEKEND")
@@ -70,8 +72,27 @@ class AnissaCore:
             raise RuntimeError("Anissa Core cannot project campaign state outside effective LIVE mode")
         return self.agenda.projection(workflow, expected_control=control)
 
-    def snapshot(self, workflow: str) -> dict:
+    def snapshot(
+        self,
+        workflow: str,
+        *,
+        week_ending: date | None = None,
+        as_of: datetime | None = None,
+    ) -> dict:
         """Compatibility view for existing role prompts and automations."""
+        if week_ending is not None and workflow != "weekly-audit":
+            raise ValueError("A week-ending target is valid only for weekly audits.")
+        moment = as_of or datetime.now(IST)
+        moment = (
+            moment.replace(tzinfo=IST)
+            if moment.tzinfo is None
+            else moment.astimezone(IST)
+        )
+        audit_week = (
+            resolve_closed_reporting_week(week_ending, as_of=moment)
+            if workflow == "weekly-audit"
+            else None
+        )
         control = self.agenda.control()
         gate = self.effective_gate(control)
         base = {
@@ -81,7 +102,11 @@ class AnissaCore:
         }
         if not gate["ok"] or gate["effective_mode"] != "LIVE":
             return {**base, "blocked": True}
-        projection = self.agenda.projection(workflow, expected_control=control)
+        projection = self.agenda.projection(
+            workflow,
+            expected_control=control,
+            audit_week=audit_week,
+        )
         result = {
             **base,
             "mode": gate["effective_mode"],
@@ -92,5 +117,9 @@ class AnissaCore:
             or bool(result.get("reminder_due"))
         )
         if needs_telemetry:
-            result["telemetry"] = self._telemetry(workflow)
+            result["telemetry"] = (
+                self._telemetry(workflow, reporting_week=audit_week, now=moment)
+                if audit_week is not None
+                else self._telemetry(workflow)
+            )
         return result
