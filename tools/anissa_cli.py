@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 from anissa.core import AnissaCore
 from logic.telemetry import telemetry_context
 from logic.workbook_io import WorkbookGateway
+from project.dispatch import DispatchGate
 from project.environment import ProjectEnvironment, resolve_environment
 
 
@@ -68,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="status",
         choices=[
             "status", "weekday-morning", "weekday-reminder", "weekend-morning",
-            "weekend-reminder", "weekly-audit", "plan-impact",
+            "weekend-reminder", "weekday-close", "weekly-audit", "plan-impact",
         ],
     )
     snapshot.add_argument("--week-ending", type=_iso_date)
@@ -98,11 +99,36 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--next-priorities", default="")
     audit.add_argument("--exact-next-action", required=True)
     audit.add_argument("--summary", default="")
+    claim = commands.add_parser("claim-dispatch")
+    claim.add_argument("slot")
+    claim.add_argument("--date", type=_iso_date)
+    claim.add_argument("--lease-seconds", type=int, default=3600)
+    for name in ("complete-dispatch", "fail-dispatch"):
+        finish = commands.add_parser(name)
+        finish.add_argument("dispatch_id")
+        finish.add_argument("claim_token")
     return parser
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    if args.cmd == "claim-dispatch":
+        result = DispatchGate(ENVIRONMENT).claim(
+            args.slot,
+            on=args.date,
+            lease_seconds=args.lease_seconds,
+        )
+        print(json.dumps(result, separators=(",", ":")))
+        return 0
+    if args.cmd in {"complete-dispatch", "fail-dispatch"}:
+        gate = DispatchGate(ENVIRONMENT)
+        result = (
+            gate.complete(args.dispatch_id, args.claim_token)
+            if args.cmd == "complete-dispatch"
+            else gate.fail(args.dispatch_id, args.claim_token)
+        )
+        print(json.dumps(result, separators=(",", ":")))
+        return 0
     gateway = WorkbookGateway(environment=ENVIRONMENT)
     core = _core(gateway)
     agenda = core.agenda

@@ -9,6 +9,7 @@ from openpyxl import load_workbook
 from anissa.core import AnissaCore
 from logic.workbook_io import WorkbookGateway
 from project.environment import RELEASE_ROOT, resolve_environment
+from project.dispatch import DispatchGate
 from project.governance import Governance
 from project.telemetry_contract import read_publication
 from worker1.src.dashboard_server import dashboard_build_id, dashboard_health
@@ -44,6 +45,16 @@ class PublicRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(publication.rows, [])
         self.assertEqual(publication.status["state"], "SETUP")
+
+    def test_dispatch_receipts_are_private_and_do_not_mutate_campaign_state(self):
+        gateway = WorkbookGateway(environment=self.environment)
+        before = sha256(self.environment.brain_path.read_bytes()).digest()
+        claim = DispatchGate(self.environment).claim("weekday-morning")
+        self.assertIn(claim["action"], {"acquired", "busy", "existing"})
+        self.assertTrue(self.environment.dispatch_slots_path.is_relative_to(
+            self.environment.instance_root
+        ))
+        self.assertEqual(before, sha256(self.environment.brain_path.read_bytes()).digest())
 
     def test_worker_source_cannot_import_campaign_gateway(self):
         worker = RELEASE_ROOT / "worker1" / "src"

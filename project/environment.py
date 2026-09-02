@@ -29,6 +29,8 @@ class ProjectEnvironment:
     lock_path: Path
     events_path: Path
     errors_path: Path
+    dispatch_slots_path: Path
+    dispatch_lock_path: Path
     backup_root: Path
     profile_root: Path
     public_persona_root: Path
@@ -55,6 +57,8 @@ class ProjectEnvironment:
             lock_path=runtime / "locks" / "anissa_brain.lock",
             events_path=runtime / "events.jsonl",
             errors_path=runtime / "errors.jsonl",
+            dispatch_slots_path=runtime / "dispatch_slots.json",
+            dispatch_lock_path=runtime / "locks" / "dispatch_slots.lock",
             backup_root=runtime / "backups",
             profile_root=root / "profile",
             public_persona_root=root / "persona",
@@ -86,6 +90,8 @@ class ProjectEnvironment:
             lock_path=runtime / "locks" / "anissa_brain.lock",
             events_path=runtime / "events.jsonl",
             errors_path=runtime / "errors.jsonl",
+            dispatch_slots_path=runtime / "dispatch_slots.json",
+            dispatch_lock_path=runtime / "locks" / "dispatch_slots.lock",
             backup_root=runtime / "backups",
             profile_root=agenda / "profile",
             public_persona_root=release / "anissa" / "persona" / "default_clean",

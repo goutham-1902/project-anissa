@@ -160,6 +160,10 @@ def initialize_instance(
     (environment.backup_root / "weekly").mkdir(parents=True, exist_ok=True)
     environment.events_path.touch()
     environment.errors_path.touch()
+    _json(environment.dispatch_slots_path, {
+        "schema_version": 1,
+        "slots": {},
+    })
     _empty_telemetry(environment)
     _json(root / "instance.json", {
         "schema_version": 1,
