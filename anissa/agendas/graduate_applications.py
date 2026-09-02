@@ -489,6 +489,70 @@ class GraduateApplicationsAgenda:
             }
             return result
 
+        if workflow == "weekday-close":
+            today_rows = sorted(
+                (
+                    row for row in tasks
+                    if date_value(row.get("Assigned Date")) == today
+                ),
+                key=_task_sort,
+            )
+            completed_today = sorted(
+                (
+                    row for row in tasks
+                    if date_value(row.get("Completed At")) == today
+                ),
+                key=_task_sort,
+            )
+            carryover = sorted((
+                row for row in open_rows
+                if (date_value(row.get("Due Date")) or date.max) < today
+            ), key=_task_sort)
+            unfinished = [
+                row for row in today_rows if row.get("Status") in OPEN_TASKS
+            ]
+            next_row = next(iter(unfinished or carryover), None)
+            statuses = {
+                status: sum(
+                    str(row.get("Status") or "") == status for row in today_rows
+                )
+                for status in ("Not Started", "Started", "Blocked", "Done", "Cancelled")
+            }
+            return {
+                **base,
+                "closing_due": bool(today_rows or completed_today),
+                "active_workload_events": active_events,
+                "today_plan": {
+                    "scheduled_minutes": sum(
+                        int(float(row.get("Estimated Minutes") or 0))
+                        for row in today_rows
+                    ),
+                    "remaining_minutes": sum(
+                        task_remaining_minutes(row) for row in unfinished
+                    ),
+                    "status_counts": statuses,
+                },
+                "today_tasks": [{
+                    **_compact_task(row, include_definition=True),
+                    "completed_at": _iso(row.get("Completed At")),
+                    "evidence": _clip(row.get("Evidence"), 180),
+                } for row in today_rows[:6]],
+                "completed_today": [{
+                    "task_id": row.get("Task ID"),
+                    "title": row.get("Task Title"),
+                    "completed_at": _iso(row.get("Completed At")),
+                    "evidence": _clip(row.get("Evidence"), 180),
+                    "minutes": row.get("Actual Minutes") or row.get("Estimated Minutes"),
+                } for row in completed_today[:4]],
+                "overdue_carryover": [
+                    _compact_task(row, include_definition=True) for row in carryover[:2]
+                ],
+                "exact_next_action": (
+                    _clip(next_row.get("Definition of Done"), 180)
+                    if next_row else ""
+                ),
+            }
+
         if workflow == "weekly-audit":
             metrics = audit_metrics or self.weekly_metrics(today, state=state)
             target = audit_week or reporting_week_for(
@@ -619,47 +683,6 @@ class GraduateApplicationsAgenda:
                 row for row in state["SOURCE_HEALTH"]
                 if str(row.get("Status") or "").lower() not in {"", "ok", "healthy"}
             ]
-        if workflow == "weekday-close":
-            today_rows = sorted(
-                (
-                    row for row in tasks
-                    if date_value(row.get("Assigned Date")) == today
-                ),
-                key=_task_sort,
-            )
-            completed_today = sorted(
-                (
-                    row for row in tasks
-                    if date_value(row.get("Completed At")) == today
-                ),
-                key=_task_sort,
-            )
-            statuses = {
-                status: sum(
-                    str(row.get("Status") or "") == status for row in today_rows
-                )
-                for status in ("Not Started", "Started", "Blocked", "Done", "Cancelled")
-            }
-            unfinished = [
-                row for row in today_rows if row.get("Status") in OPEN_TASKS
-            ]
-            result.update({
-                "closing_due": bool(today_rows or completed_today),
-                "today_status_counts": statuses,
-                "today_tasks": [
-                    _compact_task(row, include_definition=True) for row in today_rows[:6]
-                ],
-                "completed_today": [{
-                    "task_id": row.get("Task ID"),
-                    "title": row.get("Task Title"),
-                    "evidence": _clip(row.get("Evidence"), 180),
-                    "minutes": row.get("Actual Minutes") or row.get("Estimated Minutes"),
-                } for row in completed_today[:4]],
-                "exact_next_action": (
-                    _clip(unfinished[0].get("Definition of Done"), 180)
-                    if unfinished else ""
-                ),
-            })
         return result
 
     def record_weekly_audit(
