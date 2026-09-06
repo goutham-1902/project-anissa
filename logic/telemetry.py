@@ -11,7 +11,7 @@ from project.telemetry_contract import TelemetryContractError, read_publication
 
 ROOT = Path(__file__).resolve().parents[1]
 ENVIRONMENT = resolve_environment(ROOT)
-SHARED_ROOT = ENVIRONMENT.telemetry_root
+SHARED_ROOT = ENVIRONMENT.worker("thula").publication_root
 IST = ZoneInfo("Asia/Kolkata")
 BOUNDARY = time(20, 0)
 
@@ -107,32 +107,32 @@ def _read_contract(shared_root: Path, now: datetime) -> tuple[list[dict], dict] 
     try:
         schema = json.loads((shared_root / "schema.json").read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError) as exc:
-        return _unavailable(f"A2A telemetry contract is unreadable: {exc.__class__.__name__}")
+        return _unavailable(f"Thula telemetry contract is unreadable: {exc.__class__.__name__}")
     try:
         publication = read_publication(
             shared_root / "worklog.csv", shared_root / "status.json", retries=1
         )
     except TelemetryContractError as exc:
-        return _unavailable(f"A2A telemetry is invalid: {exc}")
+        return _unavailable(f"Thula telemetry is invalid: {exc}")
     status = publication.status
     state = str(status.get("state") or "UNKNOWN").upper()
     if int(schema.get("version") or 0) != 1 or int(status.get("schema_version") or 0) != 1:
-        return _unavailable("A2A telemetry schema version is unsupported", state=state)
+        return _unavailable("Thula telemetry schema version is unsupported", state=state)
     if status.get("coverage_has_gaps") is True:
-        return _unavailable("A2A telemetry coverage has gaps", state=state)
+        return _unavailable("Thula telemetry coverage has gaps", state=state)
 
     try:
         rows = publication.rows
         coverage = _parse_moment(status.get("coverage_through"))
     except (ValueError, TypeError) as exc:
-        return _unavailable(f"A2A telemetry is invalid: {exc}", state=state)
+        return _unavailable(f"Thula telemetry is invalid: {exc}", state=state)
     age_hours = max(0.0, (now - coverage).total_seconds() / 3600)
     if state == "COMPLETE" and age_hours <= 28:
         policy, freshness = "full", "fresh"
     elif state in {"COMPLETE", "STALE", "FAILED"} and age_hours <= 52:
         policy, freshness = "positive_only", "recent_stale"
     else:
-        return _unavailable("A2A telemetry is too old or incomplete for judgment", state=state)
+        return _unavailable("Thula telemetry is too old or incomplete for judgment", state=state)
     return rows, {
         "schema_version": 1,
         "availability": "available",
@@ -162,7 +162,7 @@ def telemetry_context(
     now: datetime | None = None,
     reporting_week: ReportingWeek | None = None,
 ) -> dict:
-    """Return the only compact A2A context Anissa is allowed to consume."""
+    """Return the only compact Thula context Anissa is allowed to consume."""
     now = (now or datetime.now(IST)).astimezone(IST)
     if reporting_week is not None and workflow != "weekly-audit":
         raise ValueError("A reporting-week override is valid only for weekly audits.")

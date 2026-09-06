@@ -6,8 +6,8 @@ from logic.ids import opportunity_id, stable_id
 from logic.runtime import resolve_effective_mode
 from logic.task_state import validate_transition
 from project.projections import CompletedTaskCreditProjection
-from worker1.src.accounting import IST, build_worklog, split_forest_session
-from worker1.src.sync import validate_extraction
+from soldiers.thula.src.accounting import IST, build_worklog, split_forest_session
+from soldiers.thula.src.sync import validate_extraction
 
 
 class PublicLogicTests(unittest.TestCase):

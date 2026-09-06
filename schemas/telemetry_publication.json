@@ -1,5 +1,5 @@
 {
-  "interface": "A2A work telemetry",
+  "interface": "Thula work telemetry",
   "version": 1,
   "timezone": "Asia/Kolkata",
   "operational_day": "[previous-date 20:00, date 20:00)",

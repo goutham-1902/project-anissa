@@ -28,7 +28,7 @@ ALLOWED_KINDS = {
 
 
 class TelemetryContractError(ValueError):
-    """A published A2A worklog/status pair is not safe to consume."""
+    """A published Thula worklog/status pair is not safe to consume."""
 
 
 @dataclass(frozen=True)
@@ -102,14 +102,14 @@ def decode_worklog(raw: bytes) -> list[dict]:
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
-        raise TelemetryContractError("A2A worklog must be UTF-8") from exc
+        raise TelemetryContractError("Thula worklog must be UTF-8") from exc
     reader = csv.DictReader(io.StringIO(text, newline=""))
     if reader.fieldnames != list(FIELDS):
-        raise TelemetryContractError("A2A worklog fields do not match the contract")
+        raise TelemetryContractError("Thula worklog fields do not match the contract")
     rows = [_validate_row(row, index) for index, row in enumerate(reader, start=2)]
     ids = [str(row["record_id"]) for row in rows]
     if len(ids) != len(set(ids)):
-        raise TelemetryContractError("A2A worklog contains duplicate record IDs")
+        raise TelemetryContractError("Thula worklog contains duplicate record IDs")
     return rows
 
 
@@ -118,7 +118,7 @@ def validate_rows(rows: list[dict]) -> list[dict]:
     normalized = [_validate_row(dict(row), index) for index, row in enumerate(rows, start=2)]
     ids = [str(row["record_id"]) for row in normalized]
     if len(ids) != len(set(ids)):
-        raise TelemetryContractError("A2A worklog contains duplicate record IDs")
+        raise TelemetryContractError("Thula worklog contains duplicate record IDs")
     return normalized
 
 
@@ -136,19 +136,19 @@ def read_publication(worklog_path: Path, status_path: Path, *, retries: int = 1)
             raw = Path(worklog_path).read_bytes()
             expected = str(status.get("worklog_sha256") or "")
             if not expected or sha256(raw).hexdigest() != expected:
-                raise TelemetryContractError("A2A worklog checksum does not match its status")
+                raise TelemetryContractError("Thula worklog checksum does not match its status")
             rows = decode_worklog(raw)
             try:
                 expected_rows = int(status.get("row_count"))
             except (TypeError, ValueError) as exc:
-                raise TelemetryContractError("A2A status has no valid row count") from exc
+                raise TelemetryContractError("Thula status has no valid row count") from exc
             if expected_rows != len(rows):
-                raise TelemetryContractError("A2A worklog row count does not match its status")
+                raise TelemetryContractError("Thula worklog row count does not match its status")
             return TelemetryPublication(rows=rows, status=status)
         except (OSError, ValueError, TypeError) as exc:
             last_error = exc
     if isinstance(last_error, TelemetryContractError):
         raise last_error
     raise TelemetryContractError(
-        f"A2A telemetry publication is unreadable: {type(last_error).__name__}"
+        f"Thula telemetry publication is unreadable: {type(last_error).__name__}"
     ) from last_error

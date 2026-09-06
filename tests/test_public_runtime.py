@@ -10,9 +10,14 @@ from anissa.core import AnissaCore
 from logic.workbook_io import WorkbookGateway
 from project.environment import RELEASE_ROOT, resolve_environment
 from project.dispatch import DispatchGate
+from project.discovery_brief import validate_discovery_brief
+from project.discovery_contract import DiscoveryContractError, validate_discovery_publication
 from project.governance import Governance
 from project.telemetry_contract import read_publication
-from worker1.src.dashboard_server import dashboard_build_id, dashboard_health
+from soldiers.thula import cli as thula_cli
+from soldiers.thula.src import accounting as thula_accounting
+from soldiers.thula.src.dashboard_server import dashboard_build_id, dashboard_health
+from soldiers.lucan.prompt_adapter import build_prompt
 
 
 class PublicRuntimeTests(unittest.TestCase):
@@ -40,8 +45,8 @@ class PublicRuntimeTests(unittest.TestCase):
 
     def test_empty_telemetry_is_checksum_coherent_not_false_activity(self):
         publication = read_publication(
-            self.environment.telemetry_root / "worklog.csv",
-            self.environment.telemetry_root / "status.json",
+            self.environment.worker("thula").publication_root / "worklog.csv",
+            self.environment.worker("thula").publication_root / "status.json",
         )
         self.assertEqual(publication.rows, [])
         self.assertEqual(publication.status["state"], "SETUP")
@@ -57,14 +62,82 @@ class PublicRuntimeTests(unittest.TestCase):
         self.assertEqual(before, sha256(self.environment.brain_path.read_bytes()).digest())
 
     def test_worker_source_cannot_import_campaign_gateway(self):
-        worker = RELEASE_ROOT / "worker1" / "src"
-        text = "\n".join(path.read_text() for path in worker.glob("*.py"))
+        sources = tuple(
+            path for path in (RELEASE_ROOT / "soldiers").glob("*/src")
+            if path.is_dir()
+        )
+        text = "\n".join(
+            path.read_text()
+            for source in sources
+            for path in source.glob("*.py")
+        )
         self.assertNotIn("WorkbookGateway", text)
         self.assertNotIn("anissa.agendas", text)
 
+    def test_worker_interfaces_include_live_capability_and_shadow_discovery(self):
+        self.assertTrue(callable(thula_cli.build_parser))
+        self.assertTrue(callable(thula_cli.main))
+        self.assertTrue(callable(thula_accounting.build_worklog))
+        lucan = self.environment.worker("lucan")
+        settings = json.loads(lucan.settings_path.read_text(encoding="utf-8"))
+        self.assertEqual(settings["mode"], "SETUP")
+        self.assertEqual(settings["publication"]["state"], "SHADOW")
+        self.assertIsNone(settings["thread_id"])
+        self.assertIsNone(settings["automation_id"])
+        self.assertFalse((RELEASE_ROOT / "worker1").exists())
+
+    def test_lucan_publication_cannot_smuggle_campaign_decisions(self):
+        payload = {
+            "schema_version": 1,
+            "worker_id": "lucan",
+            "agenda_id": "graduate_applications",
+            "assignment_id": "public-test",
+            "run_kind": "SCHEDULED_SWEEP",
+            "status": "COMPLETE",
+            "started_at": "2026-09-06T10:00:00+05:30",
+            "completed_at": "2026-09-06T10:01:00+05:30",
+            "candidates": [],
+            "source_failures": [],
+            "recommendation": "Apply",
+        }
+        with self.assertRaisesRegex(DiscoveryContractError, "unexpected recommendation"):
+            validate_discovery_publication(payload)
+
+    def test_lucan_shadow_adapter_is_offline_and_bounded(self):
+        brief = {
+            "schema_version": 1,
+            "worker_id": "lucan",
+            "agenda_id": "synthetic_campaign",
+            "assignment_id": "public_shadow_test",
+            "run_kind": "SCHEDULED_SWEEP",
+            "created_at": "2026-09-06T18:00:00+05:30",
+            "search_since": None,
+            "objective": "Find new funded scientific research opportunities.",
+            "max_candidates": 4,
+            "profile_facts": ["Applicant has a relevant bachelor's degree."],
+            "hard_rules": ["Do not infer missing funding or eligibility."],
+            "tracks": [{
+                "track_id": "RESEARCH_DEGREES",
+                "allocation": 1.0,
+                "objective": "Find funded research degrees.",
+                "directives": ["Prefer primary institutional sources."],
+                "source_priorities": ["Official programme pages"],
+            }],
+            "known_candidates": [],
+        }
+        validated = validate_discovery_brief(brief)
+        settings = json.loads(
+            self.environment.worker("lucan").settings_path.read_text(encoding="utf-8")
+        )
+        package = build_prompt(brief, settings)
+        self.assertEqual(validated.assignment_id, package.assignment_id)
+        self.assertLess(package.approximate_input_tokens, 4500)
+        self.assertFalse((RELEASE_ROOT / "soldiers" / "lucan" / "cli.py").exists())
+
     def test_dashboard_includes_bounded_weekly_history_without_private_assets(self):
-        index = (RELEASE_ROOT / "worker1" / "dashboard" / "index.html").read_text()
-        app = (RELEASE_ROOT / "worker1" / "dashboard" / "app.js").read_text()
+        dashboard = RELEASE_ROOT / "soldiers" / "thula" / "dashboard"
+        index = (dashboard / "index.html").read_text()
+        app = (dashboard / "app.js").read_text()
         self.assertIn('id="weeklyHistory"', index)
         self.assertIn("weekly_history", app)
         self.assertNotIn("anissa-verdict.png", index)
@@ -72,7 +145,7 @@ class PublicRuntimeTests(unittest.TestCase):
     def test_dashboard_health_identifies_the_current_release_build(self):
         build_id = dashboard_build_id(RELEASE_ROOT)
         health = dashboard_health(build_id)
-        self.assertEqual(health["service"], "a2a-dashboard")
+        self.assertEqual(health["service"], "thula-dashboard")
         self.assertEqual(health["build_id"], build_id)
         self.assertEqual(len(build_id), 16)
 
@@ -90,13 +163,13 @@ class PublicRuntimeTests(unittest.TestCase):
         governance.initialize_ledgers("2.5.0-dev.8")
         decision = governance.evaluate_scope(
             "SOLDIERS_MAINTAINER",
-            ["worker1/src/sync.py", "project/projections.py"],
+            ["soldiers/thula/src/sync.py", "project/projections.py"],
         )
         self.assertFalse(decision["accepted"])
         self.assertEqual(decision["defer_to"], "GENERAL")
 
         route = governance.publication_route(
-            "SOLDIERS_MAINTAINER", ["worker1/src/sync.py"]
+            "SOLDIERS_MAINTAINER", ["soldiers/thula/src/sync.py"]
         )
         self.assertTrue(route["accepted"])
         self.assertEqual(route["publisher"], "GENERAL")

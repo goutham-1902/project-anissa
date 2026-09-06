@@ -10,7 +10,7 @@ import subprocess
 
 TEXT_SUFFIXES = {
     "", ".css", ".html", ".ini", ".js", ".json", ".md", ".plist",
-    ".py", ".toml", ".txt", ".yaml", ".yml",
+    ".py", ".template", ".toml", ".txt", ".yaml", ".yml",
 }
 PRIVATE_MARKERS = tuple(part.lower() for part in (
     "gou" + "tham",

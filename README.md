@@ -14,7 +14,7 @@ flowchart LR
     Portfolio --> Agenda[Agenda]
     Agenda --> Gateway[Workbook gateway]
     Gateway --> Brain[(Private canonical workbook)]
-    Worker[Capability worker] --> Projection[Typed read-only projection]
+    Workers[Capability workers] --> Projection[Typed read-only projections]
     Projection --> Core
     Projection --> Dashboard[Local dashboard]
 ```
@@ -32,6 +32,12 @@ The private overlay can personalize tone and interaction. It cannot change
 eligibility, funding, deadlines, evidence, ranking, calculations or task state.
 The included clean persona is a reusable default; create personal extensions in
 the external instance and never commit that instance.
+
+The clean release includes two worker interfaces: Thula for deterministic focus
+telemetry and Lucan for bounded opportunity discovery. Lucan ships in shadow
+mode with no task or automation; his publications carry evidence for Anissa to
+verify and never mutate an agenda directly. His offline adapter validates a
+compact brief and synthetic result without providing a browser or executor.
 
 ## Install and verify
 
@@ -65,6 +71,6 @@ runs the privacy audit and pushes it. Private-instance, private-persona and
 worker-private changes remain local.
 
 Git preserves code history; keep only current source in the checkout. After a
-verified maintenance update, run `python -B worker1/a2a_cli.py ensure-server`.
+verified maintenance update, run `python -B soldiers/thula/cli.py ensure-server`.
 The command compares `/health` with the current release build ID, replaces only
-an A2A-owned stale process, and reports the deployed build ID.
+a Thula-owned stale process, and reports the deployed build ID.

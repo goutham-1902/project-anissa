@@ -1,3 +1,5 @@
+"""Private technical state storage for Thula."""
+
 from __future__ import annotations
 
 from contextlib import contextmanager

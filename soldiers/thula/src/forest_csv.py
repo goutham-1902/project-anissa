@@ -6,7 +6,7 @@ from datetime import datetime
 from hashlib import sha256
 import io
 
-from worker1.src.accounting import parse_datetime
+from soldiers.thula.src.accounting import parse_datetime
 
 
 HEADERS = ["Start Time", "End Time", "Tag", "Note", "Tree Type", "Is Success"]
@@ -36,7 +36,7 @@ def decode_csv_base64(value: str) -> bytes:
 
 
 def parse_forest_csv(data: bytes | str, *, captured_at: object) -> dict:
-    """Convert one complete Forest history export into the normalized A2A envelope."""
+    """Convert one complete Forest history export into Thula's normalized envelope."""
     if isinstance(data, bytes):
         try:
             text = data.decode("utf-8-sig")

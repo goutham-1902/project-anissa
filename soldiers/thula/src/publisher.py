@@ -1,3 +1,5 @@
+"""Atomic telemetry publication for Thula."""
+
 from __future__ import annotations
 
 from hashlib import sha256

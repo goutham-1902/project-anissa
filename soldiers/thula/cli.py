@@ -13,23 +13,25 @@ import time
 from urllib.request import urlopen
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from project.environment import resolve_environment
-from project.a2a_workflow import run_a2a_csv_sync, run_a2a_sync
 from project.dashboard import compose_dashboard
-from worker1.src.dashboard_server import dashboard_build_id, run_server
-from worker1.src.forest_csv import decode_csv_base64
-from worker1.src.sync import load_payload, record_failure, record_stale
+from project.thula_workflow import run_thula_csv_sync, run_thula_sync
+from soldiers.thula.src.dashboard_server import dashboard_build_id, run_server
+from soldiers.thula.src.forest_csv import decode_csv_base64
+from soldiers.thula.src.sync import load_payload, record_failure, record_stale
 
 
-WORKER = ROOT / "worker1"
+WORKER = ROOT / "soldiers" / "thula"
 ENVIRONMENT = resolve_environment(ROOT)
-PRIVATE = ENVIRONMENT.a2a_private_root
-SHARED = ENVIRONMENT.telemetry_root
+WORKER_PATHS = ENVIRONMENT.worker("thula")
+PRIVATE = WORKER_PATHS.private_root
+SHARED = WORKER_PATHS.publication_root
 DEFAULTS = {
-    "store_path": PRIVATE / "a2a_state.sqlite3",
+    # Historical file and record namespaces remain stable across the identity cutover.
+    "store_path": PRIVATE / "thula_state.sqlite3",
     "worklog_path": SHARED / "worklog.csv",
     "status_path": SHARED / "status.json",
     "static_root": WORKER / "dashboard",
@@ -66,14 +68,17 @@ def _owned_dashboard_pid(health: dict, pid_path: Path) -> int | None:
         candidates.append(pid_path.read_text(encoding="utf-8").strip())
     except OSError:
         pass
-    expected_cli = str(Path(__file__).resolve())
+    expected_cli = Path(__file__).resolve()
     for value in candidates:
         try:
             pid = int(value)
         except (TypeError, ValueError):
             continue
         command = _dashboard_process_command(pid)
-        if expected_cli in command and " serve " in f" {command} ":
+        if (
+            str(expected_cli) in command
+            and " serve " in f" {command} "
+        ):
             return pid
     return None
 
@@ -92,7 +97,7 @@ def _stop_dashboard(pid: int, host: str, port: int, timeout: float = 5.0) -> boo
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="A2A focus telemetry worker")
+    parser = argparse.ArgumentParser(description="Thula focus telemetry worker")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sync = sub.add_parser("sync", help="Import one completed Forest extraction")
@@ -122,7 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ensure = sub.add_parser(
         "ensure-server",
-        help="Start the dashboard or replace an A2A-owned stale build",
+        help="Start the dashboard or replace a Thula-owned stale build",
     )
     ensure.add_argument("--host", default="127.0.0.1")
     ensure.add_argument("--port", type=int, default=8765)
@@ -140,7 +145,7 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     paths = _paths(args)
     if args.command == "sync":
-        result = run_a2a_sync(
+        result = run_thula_sync(
             environment=ENVIRONMENT,
             payload=load_payload(args.forest_json),
             **{key: paths[key] for key in ("store_path", "worklog_path", "status_path")},
@@ -152,7 +157,7 @@ def main(argv=None) -> int:
             Path(args.forest_csv).read_bytes()
             if args.forest_csv else decode_csv_base64(args.csv_base64)
         )
-        result = run_a2a_csv_sync(
+        result = run_thula_csv_sync(
             environment=ENVIRONMENT,
             csv_data=csv_data,
             captured_at=args.captured_at,
@@ -190,7 +195,7 @@ def main(argv=None) -> int:
         health = _health(args.host, args.port)
         if (
             health
-            and health.get("service") == "a2a-dashboard"
+            and health.get("service") == "thula-dashboard"
             and health.get("build_id") == current_build
         ):
             print(json.dumps({
@@ -229,7 +234,7 @@ def main(argv=None) -> int:
             started_health = _health(args.host, args.port)
             if (
                 started_health
-                and started_health.get("service") == "a2a-dashboard"
+                and started_health.get("service") == "thula-dashboard"
                 and started_health.get("build_id") == current_build
             ):
                 print(json.dumps({

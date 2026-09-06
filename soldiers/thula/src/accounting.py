@@ -1,3 +1,5 @@
+"""Deterministic focus accounting for Thula."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta

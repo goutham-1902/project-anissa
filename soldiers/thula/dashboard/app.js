@@ -1,3 +1,4 @@
+/* Thula-owned local dashboard presentation. */
 const mins = value => `${(Number(value || 0) / 60).toFixed(1)} h`;
 const pct = value => `${(Number(value || 0) * 100).toFixed(0)}%`;
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

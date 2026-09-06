@@ -25,11 +25,11 @@ BUILD_INPUTS = (
     "anissa/**/*.py",
     "logic/**/*.py",
     "project/**/*.py",
-    "worker1/a2a_cli.py",
-    "worker1/src/**/*.py",
-    "worker1/dashboard/*.html",
-    "worker1/dashboard/*.css",
-    "worker1/dashboard/*.js",
+    "soldiers/thula/cli.py",
+    "soldiers/thula/src/**/*.py",
+    "soldiers/thula/dashboard/*.html",
+    "soldiers/thula/dashboard/*.css",
+    "soldiers/thula/dashboard/*.js",
 )
 
 
@@ -58,7 +58,7 @@ def dashboard_build_id(release_root: Path) -> str:
 def dashboard_health(build_id: str) -> dict:
     return {
         "ok": True,
-        "service": "a2a-dashboard",
+        "service": "thula-dashboard",
         "build_id": build_id,
         "pid": os.getpid(),
     }
@@ -137,7 +137,7 @@ def make_handler(*, static_root: Path, worklog_path: Path, status_path: Path,
 def run_server(*, host: str, port: int, static_root: Path, worklog_path: Path,
                status_path: Path, environment: ProjectEnvironment):
     if host not in {"127.0.0.1", "localhost"}:
-        raise ValueError("A2A dashboard is Mac-local only; bind to 127.0.0.1")
+        raise ValueError("Thula dashboard is Mac-local only; bind to 127.0.0.1")
     handler = make_handler(
         static_root=static_root, worklog_path=worklog_path,
         status_path=status_path, environment=environment,

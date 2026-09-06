@@ -38,8 +38,7 @@
     },
     "SOLDIERS_MAINTAINER": {
       "prefixes": [
-        "soldiers/",
-        "worker1/"
+        "soldiers/"
       ],
       "exact": []
     }
@@ -55,18 +54,22 @@
       "profile/",
       "runtime/",
       "shared/",
-      "worker1/private/"
+      "soldiers/thula/private/",
+      "soldiers/thula/tests/",
+      "soldiers/thula/dashboard/assets/",
+      "soldiers/lucan/private/",
+      "soldiers/lucan/tests/"
     ],
     "rule": "Every maintainer must route verified public-safe fixes into the public release. Atomic maintainers hand off publication to General; General alone generates, audits and pushes the allowlisted public projection. Private-instance and private-persona changes remain local."
   },
   "local_deployment": {
-    "dashboard_freshness_command": "python -B worker1/a2a_cli.py ensure-server --host 127.0.0.1 --port 8765",
+    "dashboard_freshness_command": "python -B soldiers/thula/cli.py ensure-server --host 127.0.0.1 --port 8765",
     "success_states": [
       "running",
       "started",
       "restarted"
     ],
-    "rule": "A code maintenance change is not operationally complete until verification passes and the dashboard health build_id matches the current checkout. The command may replace only a process verified as A2A-owned."
+    "rule": "A code maintenance change is not operationally complete until verification passes and the dashboard health build_id matches the current checkout. The command may replace only a process verified as Thula-owned."
   },
   "rule": "Evaluate scope before execution. Atomic work stays with its owner; mixed or unknown scope defers to General. General may perform global or atomic maintenance."
 }

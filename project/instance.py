@@ -83,18 +83,30 @@ def _empty_workbook(environment: ProjectEnvironment, package_version: str) -> No
 
 
 def _empty_telemetry(environment: ProjectEnvironment) -> None:
-    environment.telemetry_root.mkdir(parents=True, exist_ok=True)
-    (environment.telemetry_root / "schema.json").write_bytes(
+    thula = environment.worker("thula")
+    thula.publication_root.mkdir(parents=True, exist_ok=True)
+    (thula.publication_root / "schema.json").write_bytes(
         (environment.release_root / "schemas" / "telemetry_publication.json").read_bytes()
     )
-    worklog = environment.telemetry_root / "worklog.csv"
+    worklog = thula.publication_root / "worklog.csv"
     with worklog.open("w", encoding="utf-8", newline="") as handle:
         csv.writer(handle).writerow(FIELDS)
-    _json(environment.telemetry_root / "status.json", {
+    _json(thula.publication_root / "status.json", {
         "schema_version": 1,
         "state": "SETUP",
         "row_count": 0,
         "worklog_sha256": sha256(worklog.read_bytes()).hexdigest(),
+    })
+
+
+def _empty_discovery_publication(environment: ProjectEnvironment) -> None:
+    lucan = environment.worker("lucan")
+    lucan.publication_root.mkdir(parents=True, exist_ok=True)
+    _json(lucan.publication_root / "status.json", {
+        "schema_version": 1,
+        "worker_id": "lucan",
+        "state": "SETUP",
+        "last_publication": None,
     })
 
 
@@ -135,12 +147,22 @@ def initialize_instance(
             "allocation_weight": 1.0,
         }],
     })
-    _json(environment.worker_settings_path, {
-        "name": "A2A | assistant to anissa",
+    thula = environment.worker("thula")
+    _json(thula.settings_path, {
+        "name": "Thula",
         "mode": "SETUP",
         "acquisition": {"type": "manual_csv_import", "timezone": "Asia/Kolkata"},
         "dashboard": {"host": "127.0.0.1", "port": 8765},
     })
+    lucan = environment.worker("lucan")
+    _json(
+        lucan.settings_path,
+        json.loads(
+            (release / "soldiers" / "lucan" / "settings.default.json").read_text(
+                encoding="utf-8"
+            )
+        ),
+    )
     _json(environment.profile_root / "verified_profile.json", {
         "schema_version": 1,
         "status": "UNCONFIGURED",
@@ -152,7 +174,8 @@ def initialize_instance(
         "questions": [],
     })
     environment.private_persona_root.mkdir(parents=True, exist_ok=True)
-    environment.a2a_private_root.mkdir(parents=True, exist_ok=True)
+    thula.private_root.mkdir(parents=True, exist_ok=True)
+    lucan.private_root.mkdir(parents=True, exist_ok=True)
     environment.private_assets_root.mkdir(parents=True, exist_ok=True)
     environment.maintainer_ledgers_root.mkdir(parents=True, exist_ok=True)
     environment.lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -165,6 +188,7 @@ def initialize_instance(
         "slots": {},
     })
     _empty_telemetry(environment)
+    _empty_discovery_publication(environment)
     _json(root / "instance.json", {
         "schema_version": 1,
         "release_version": version,

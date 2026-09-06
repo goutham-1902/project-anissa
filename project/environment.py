@@ -15,6 +15,16 @@ DEFAULT_POINTER = (
 
 
 @dataclass(frozen=True)
+class WorkerPaths:
+    """Physical paths owned or published by one independent worker."""
+
+    worker_id: str
+    settings_path: Path
+    private_root: Path
+    publication_root: Path
+
+
+@dataclass(frozen=True)
 class ProjectEnvironment:
     """Resolve physical deployment paths behind one small, validated interface."""
 
@@ -25,7 +35,7 @@ class ProjectEnvironment:
     schema_path: Path
     runtime_settings_path: Path
     role_registry_path: Path
-    worker_settings_path: Path
+    _worker_paths: tuple[WorkerPaths, ...]
     lock_path: Path
     events_path: Path
     errors_path: Path
@@ -35,11 +45,18 @@ class ProjectEnvironment:
     profile_root: Path
     public_persona_root: Path
     private_persona_root: Path
-    a2a_private_root: Path
-    telemetry_root: Path
     private_assets_root: Path
     portfolio_path: Path
     maintainer_ledgers_root: Path
+
+    def worker(self, worker_id: str) -> WorkerPaths:
+        """Return one worker's paths without exposing deployment layout details."""
+
+        requested = str(worker_id).strip().lower()
+        for paths in self._worker_paths:
+            if paths.worker_id == requested:
+                return paths
+        raise KeyError(f"unknown Project Anissa worker: {worker_id!r}")
 
     @classmethod
     def existing_layout(cls, release_root: Path = RELEASE_ROOT) -> "ProjectEnvironment":
@@ -53,7 +70,20 @@ class ProjectEnvironment:
             schema_path=root / "schemas" / "workbook_schema.json",
             runtime_settings_path=runtime / "settings.json",
             role_registry_path=root / "schemas" / "chat_roles.json",
-            worker_settings_path=root / "worker1" / "settings.json",
+            _worker_paths=(
+                WorkerPaths(
+                    worker_id="thula",
+                    settings_path=root / "soldiers" / "thula" / "settings.json",
+                    private_root=root / "soldiers" / "thula" / "private",
+                    publication_root=root / "shared" / "thula",
+                ),
+                WorkerPaths(
+                    worker_id="lucan",
+                    settings_path=root / "soldiers" / "lucan" / "settings.default.json",
+                    private_root=root / "soldiers" / "lucan" / "private",
+                    publication_root=root / "shared" / "lucan",
+                ),
+            ),
             lock_path=runtime / "locks" / "anissa_brain.lock",
             events_path=runtime / "events.jsonl",
             errors_path=runtime / "errors.jsonl",
@@ -63,9 +93,7 @@ class ProjectEnvironment:
             profile_root=root / "profile",
             public_persona_root=root / "persona",
             private_persona_root=root / "persona",
-            a2a_private_root=root / "worker1" / "private",
-            telemetry_root=root / "shared" / "worker1",
-            private_assets_root=root / "worker1" / "dashboard" / "assets",
+            private_assets_root=root / "assets" / "private",
             portfolio_path=runtime / "portfolio.json",
             maintainer_ledgers_root=runtime / "maintainer_ledgers",
         )
@@ -86,7 +114,20 @@ class ProjectEnvironment:
             schema_path=release / "schemas" / "workbook_schema.json",
             runtime_settings_path=runtime / "settings.json",
             role_registry_path=runtime / "roles.json",
-            worker_settings_path=instance / "soldiers" / "a2a" / "settings.json",
+            _worker_paths=(
+                WorkerPaths(
+                    worker_id="thula",
+                    settings_path=instance / "soldiers" / "thula" / "settings.json",
+                    private_root=instance / "soldiers" / "thula" / "private",
+                    publication_root=instance / "telemetry" / "thula",
+                ),
+                WorkerPaths(
+                    worker_id="lucan",
+                    settings_path=instance / "soldiers" / "lucan" / "settings.json",
+                    private_root=instance / "soldiers" / "lucan" / "private",
+                    publication_root=instance / "publications" / "lucan",
+                ),
+            ),
             lock_path=runtime / "locks" / "anissa_brain.lock",
             events_path=runtime / "events.jsonl",
             errors_path=runtime / "errors.jsonl",
@@ -96,8 +137,6 @@ class ProjectEnvironment:
             profile_root=agenda / "profile",
             public_persona_root=release / "anissa" / "persona" / "default_clean",
             private_persona_root=instance / "anissa" / "persona" / "private",
-            a2a_private_root=instance / "soldiers" / "a2a" / "private",
-            telemetry_root=instance / "telemetry" / "a2a",
             private_assets_root=instance / "assets" / "private",
             portfolio_path=instance / "portfolio.json",
             maintainer_ledgers_root=instance / "maintainer_ledgers",

@@ -8,7 +8,7 @@ from project.telemetry_contract import BOUNDARY, IST
 
 @dataclass(frozen=True)
 class ReportingWeek:
-    """One Monday-Sunday reporting week and its closed A2A telemetry window."""
+    """One Monday-Sunday reporting week and its closed Thula telemetry window."""
 
     start: date
     end: date
@@ -45,7 +45,7 @@ def previous_reporting_week(value: date | datetime) -> ReportingWeek:
 
 
 def completed_reporting_week(moment: datetime) -> ReportingWeek:
-    """Return the latest week whose Sunday 20:00 A2A window has closed."""
+    """Return the latest week whose Sunday 20:00 Thula window has closed."""
 
     local = _local_moment(moment)
     current = reporting_week_for(local)

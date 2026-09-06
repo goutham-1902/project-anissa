@@ -4,9 +4,9 @@ from datetime import datetime
 import json
 from pathlib import Path
 
-from worker1.src.accounting import build_worklog, parse_datetime
-from worker1.src.publisher import publish_status, publish_worklog, read_status
-from worker1.src.store import StateStore
+from soldiers.thula.src.accounting import build_worklog, parse_datetime
+from soldiers.thula.src.publisher import publish_status, publish_worklog, read_status
+from soldiers.thula.src.store import StateStore
 
 
 def validate_extraction(payload: dict) -> dict:
@@ -36,7 +36,7 @@ def validate_extraction(payload: dict) -> dict:
             raise ValueError(f"Forest session {index} lies outside the extraction range")
         source_id = str(session.get("id") or "").strip()
         if not source_id:
-            from worker1.src.accounting import _stable_id
+            from soldiers.thula.src.accounting import _stable_id
             source_id = _stable_id("forest_session", start.isoformat(), end.isoformat(), session.get("tag"))
         if source_id in source_ids:
             raise ValueError(f"Forest session {index} duplicates source ID {source_id}")
@@ -136,7 +136,7 @@ def run_csv_sync(*, csv_data: bytes | str, captured_at: object,
                  now: datetime | None = None) -> dict:
     """Import a Drive-hosted Forest export, or mark an unchanged export stale."""
     from hashlib import sha256
-    from worker1.src.forest_csv import parse_forest_csv
+    from soldiers.thula.src.forest_csv import parse_forest_csv
 
     now = now or datetime.now().astimezone()
     previous = read_status(status_path)

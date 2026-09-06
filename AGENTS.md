@@ -29,6 +29,11 @@ projections, cannot import the workbook gateway or agenda implementation, and
 cannot mutate campaign state. Missing or stale telemetry is not evidence of
 inactivity and never becomes a false zero.
 
+A worker configured as `SETUP` or `SHADOW` must not run, create a task, or bind
+an automation. Discovery candidates remain evidence inputs, not campaign
+decisions. An offline prompt adapter may render a supplied brief and validate a
+synthetic result; that does not authorize browsing or live publication.
+
 ## Efficiency
 
 Use code for IDs, deduplication, dates, arithmetic, state transitions and compact
@@ -47,4 +52,4 @@ Git history, not duplicate source trees or tracked bytecode, preserves code
 versions. After every verified code maintenance change, run the configured
 dashboard freshness command and require its reported build ID to match the
 current checkout before declaring deployment complete. It may replace only a
-process verified as A2A-owned.
+process verified as Thula-owned.
