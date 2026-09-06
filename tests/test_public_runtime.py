@@ -84,6 +84,12 @@ class PublicRuntimeTests(unittest.TestCase):
         self.assertEqual(settings["publication"]["state"], "SHADOW")
         self.assertIsNone(settings["thread_id"])
         self.assertIsNone(settings["automation_id"])
+
+        root_contract = (RELEASE_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        readme = (RELEASE_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("one persistent\n`Lucan` task", root_contract)
+        self.assertIn("persistent `Lucan` task", readme)
+        self.assertIn("cannot write the publication slot", root_contract)
         self.assertFalse((RELEASE_ROOT / "worker1").exists())
 
     def test_lucan_publication_cannot_smuggle_campaign_decisions(self):

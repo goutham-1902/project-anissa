@@ -14,7 +14,9 @@ The brief carries only a bounded cache of currently relevant known candidates.
 It is a search-efficiency hint, not the deduplication authority; the publication
 contract and agenda gateway retain deterministic cross-source deduplication.
 
-The worker is currently shadow-only: there is no task binding, automation or
-executable web routine. Scheduled runs are configured for `gpt-5.6-terra` at
-medium reasoning; explicit elaborate assignments use the same model at high
-reasoning.
+The worker is currently shadow-only. A private instance may bind one persistent
+`Lucan` task for explicitly assigned manual trials; the task returns raw JSON to
+General for local validation and does not write the publication slot. The
+reusable release contains no task binding or automation. Scheduled runs are
+configured for `gpt-5.6-terra` at medium reasoning; explicit elaborate
+assignments use the same model at high reasoning.

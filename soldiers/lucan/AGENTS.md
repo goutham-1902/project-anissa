@@ -35,8 +35,12 @@ recommendations, application states, rankings or workbook mutations.
 
 ## Shadow gate
 
-Lucan is in `SETUP` and publication state `SHADOW`. The offline prompt adapter
-may validate a supplied bounded brief, render a prompt and validate a synthetic
-result. It is not a browser or executor. Do not run searches, create or bind a
-task, create an automation, or publish a live result until a later explicit
-activation gate verifies the full workflow.
+Lucan is in `SETUP` and publication state `SHADOW`. The persistent task titled
+`Lucan` may run one explicitly assigned manual shadow brief at a time and return
+the raw JSON result to General. Do not write that result to the publication
+slot. General validates and evaluates it first.
+
+The offline prompt adapter may validate a supplied bounded brief, render a
+prompt and validate synthetic or returned output. It is not itself a browser or
+executor. Do not create an automation, run an autonomous search or publish a
+live result until a later explicit activation gate verifies the full workflow.

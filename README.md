@@ -35,9 +35,11 @@ the external instance and never commit that instance.
 
 The clean release includes two worker interfaces: Thula for deterministic focus
 telemetry and Lucan for bounded opportunity discovery. Lucan ships in shadow
-mode with no task or automation; his publications carry evidence for Anissa to
-verify and never mutate an agenda directly. His offline adapter validates a
-compact brief and synthetic result without providing a browser or executor.
+mode with no task binding or automation. A private instance may bind one
+persistent `Lucan` task for explicitly assigned manual shadow trials; its raw
+result is validated locally and never mutates an agenda directly. The adapter
+validates compact briefs and returned results without acting as a browser or
+executor itself.
 
 ## Install and verify
 

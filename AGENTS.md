@@ -29,10 +29,13 @@ projections, cannot import the workbook gateway or agenda implementation, and
 cannot mutate campaign state. Missing or stale telemetry is not evidence of
 inactivity and never becomes a false zero.
 
-A worker configured as `SETUP` or `SHADOW` must not run, create a task, or bind
-an automation. Discovery candidates remain evidence inputs, not campaign
-decisions. An offline prompt adapter may render a supplied brief and validate a
-synthetic result; that does not authorize browsing or live publication.
+A worker configured as `SETUP` or `SHADOW` must not run autonomously, bind an
+automation or publish a live result. A private instance may bind one persistent
+`Lucan` task for an explicitly assigned manual shadow brief; it returns raw JSON
+to General for validation and cannot write the publication slot. Discovery
+candidates remain evidence inputs, not campaign decisions. The prompt adapter
+may render a supplied brief and validate a returned result; it does not itself
+authorize browsing or publication.
 
 ## Efficiency
 
