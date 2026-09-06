@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime
 import json
+import re
 from typing import Mapping
 
 from project.discovery_brief import DiscoveryBrief, validate_discovery_brief
@@ -20,6 +21,11 @@ RAW_CANDIDATE_FIELDS = {
     "discovery_url", "official_url", "funding_text", "eligibility_text",
     "relevance_note", "verification_state", "cautions", "evidence",
 }
+DOMESTIC_ONLY = re.compile(
+    r"\b(?:domestic[- ]only|domestic (?:candidates|applicants|students) only|"
+    r"only domestic (?:candidates|applicants|students))\b",
+    re.IGNORECASE,
+)
 
 
 class PromptAdapterError(ValueError):
@@ -61,6 +67,8 @@ def _profile(settings: object, run_kind: str) -> tuple[str, str]:
 
 def _brief_payload(brief: DiscoveryBrief) -> dict:
     payload = asdict(brief)
+    if brief.domestic_eligibility_countries is None:
+        payload.pop("domestic_eligibility_countries")
     payload["created_at"] = brief.created_at.isoformat()
     payload["search_since"] = brief.search_since.isoformat() if brief.search_since else None
     for index, candidate in enumerate(brief.known_candidates):
@@ -78,7 +86,15 @@ def build_prompt(brief_payload: object, settings: object) -> PromptPackage:
     compact_brief = json.dumps(
         _brief_payload(brief), ensure_ascii=False, separators=(",", ":")
     )
-    prompt = "\n".join((
+    eligibility_rule = (
+        "BRIEF_JSON.domestic_eligibility_countries is the complete list of "
+        "countries where the applicant qualifies as a domestic candidate. Do "
+        "not return opportunities explicitly restricted to domestic candidates "
+        "in any other country."
+        if brief.domestic_eligibility_countries is not None
+        else None
+    )
+    instructions = [
         "You are Lucan, Project Anissa's research-only opportunity-discovery worker.",
         "Use web search for this assignment. Search broadly enough to satisfy each enabled track, then verify material claims against primary official sources.",
         "Return new candidates or material changes to known candidates only. Treat indexes and professional networks as discovery leads, not primary verification.",
@@ -91,8 +107,11 @@ def build_prompt(brief_payload: object, settings: object) -> PromptPackage:
         "Each evidence record must contain exactly url, source_kind, checked_at, claim. source_kind must be OFFICIAL, LAB, INDEX, or PROFESSIONAL_NETWORK; checked_at must include a timezone.",
         "status must be COMPLETE with no source_failures, PARTIAL with at least one source failure, or FAILED with failures and no candidates.",
         "Do not generate candidate IDs or envelope metadata; the local adapter supplies and validates them deterministically.",
-        f"BRIEF_JSON={compact_brief}",
-    ))
+    ]
+    if eligibility_rule is not None:
+        instructions.insert(3, eligibility_rule)
+    instructions.append(f"BRIEF_JSON={compact_brief}")
+    prompt = "\n".join(instructions)
     if len(prompt) > MAX_PROMPT_CHARS:
         raise PromptAdapterError(
             f"rendered prompt exceeds the {MAX_PROMPT_CHARS}-character budget"
@@ -151,6 +170,20 @@ def assemble_shadow_publication(
     candidates = []
     for raw in result["candidates"]:
         candidate = dict(raw)
+        if brief.domestic_eligibility_countries is not None:
+            eligible_countries = {
+                country.casefold() for country in brief.domestic_eligibility_countries
+            }
+            candidate_country = str(candidate["country"]).strip().casefold()
+            eligibility_text = str(candidate["eligibility_text"])
+            if (
+                candidate_country not in eligible_countries
+                and DOMESTIC_ONLY.search(eligibility_text)
+            ):
+                raise PromptAdapterError(
+                    "model result includes a domestic-only candidate outside the "
+                    "applicant's eligible countries"
+                )
         candidate["candidate_id"] = discovery_candidate_id(
             str(candidate["institution"]),
             str(candidate["title"]),

@@ -12,7 +12,7 @@
     "publication_duty": "Route verified public-safe fixes to General; keep private-instance and private-persona changes local"
   },
   "SOLDIERS_MAINTAINER": {
-    "name": "Project Anissa | Soldiers Maintainer",
+    "name": "Project Anissa | Lieutenant",
     "ledger": "soldiers_maintainer.json",
     "responsibility": "Thula, Lucan and future capability-scoped workers",
     "publication_duty": "Route verified public-safe fixes to General; keep worker private state and private-instance changes local"

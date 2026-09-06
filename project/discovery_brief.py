@@ -9,7 +9,8 @@ from typing import Mapping
 from project.discovery_contract import MAX_CANDIDATES, RUN_KINDS
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSIONS = {1, SCHEMA_VERSION}
 MAX_TRACKS = 4
 MAX_PROFILE_FACTS = 20
 MAX_HARD_RULES = 30
@@ -52,6 +53,7 @@ class DiscoveryBrief:
     search_since: date | None
     objective: str
     max_candidates: int
+    domestic_eligibility_countries: tuple[str, ...] | None
     profile_facts: tuple[str, ...]
     hard_rules: tuple[str, ...]
     tracks: tuple[DiscoveryTrack, ...]
@@ -179,17 +181,21 @@ def validate_discovery_brief(payload: object) -> DiscoveryBrief:
     """Validate and freeze one bounded, agenda-authored Lucan assignment."""
 
     row = _object(payload, "brief")
+    schema_version = row.get("schema_version")
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+        raise DiscoveryBriefError("brief schema_version is unsupported")
+    expected = {
+        "schema_version", "worker_id", "agenda_id", "assignment_id", "run_kind",
+        "created_at", "search_since", "objective", "max_candidates",
+        "profile_facts", "hard_rules", "tracks", "known_candidates",
+    }
+    if schema_version == SCHEMA_VERSION:
+        expected.add("domestic_eligibility_countries")
     _exact_keys(
         row,
-        {
-            "schema_version", "worker_id", "agenda_id", "assignment_id", "run_kind",
-            "created_at", "search_since", "objective", "max_candidates",
-            "profile_facts", "hard_rules", "tracks", "known_candidates",
-        },
+        expected,
         "brief",
     )
-    if row["schema_version"] != SCHEMA_VERSION:
-        raise DiscoveryBriefError("brief schema_version is unsupported")
     if row["worker_id"] != "lucan":
         raise DiscoveryBriefError("brief worker_id must be lucan")
     agenda_id = _text(row["agenda_id"], "brief.agenda_id", max_chars=80)
@@ -237,7 +243,7 @@ def validate_discovery_brief(payload: object) -> DiscoveryBrief:
     if len(known_ids) != len(set(known_ids)):
         raise DiscoveryBriefError("brief.known_candidates contains duplicate candidate IDs")
     return DiscoveryBrief(
-        schema_version=SCHEMA_VERSION,
+        schema_version=schema_version,
         worker_id="lucan",
         agenda_id=agenda_id,
         assignment_id=assignment_id,
@@ -246,6 +252,16 @@ def validate_discovery_brief(payload: object) -> DiscoveryBrief:
         search_since=search_since,
         objective=_text(row["objective"], "brief.objective", max_chars=600),
         max_candidates=max_candidates,
+        domestic_eligibility_countries=(
+            _strings(
+                row["domestic_eligibility_countries"],
+                "brief.domestic_eligibility_countries",
+                limit=8,
+                max_chars=80,
+            )
+            if schema_version == SCHEMA_VERSION
+            else None
+        ),
         profile_facts=_strings(
             row["profile_facts"],
             "brief.profile_facts",

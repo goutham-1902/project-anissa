@@ -111,7 +111,7 @@ class PublicRuntimeTests(unittest.TestCase):
 
     def test_lucan_shadow_adapter_is_offline_and_bounded(self):
         brief = {
-            "schema_version": 1,
+            "schema_version": 2,
             "worker_id": "lucan",
             "agenda_id": "synthetic_campaign",
             "assignment_id": "public_shadow_test",
@@ -120,6 +120,7 @@ class PublicRuntimeTests(unittest.TestCase):
             "search_since": None,
             "objective": "Find new funded scientific research opportunities.",
             "max_candidates": 4,
+            "domestic_eligibility_countries": ["Exampleland"],
             "profile_facts": ["Applicant has a relevant bachelor's degree."],
             "hard_rules": ["Do not infer missing funding or eligibility."],
             "tracks": [{
@@ -167,6 +168,9 @@ class PublicRuntimeTests(unittest.TestCase):
     def test_maintainer_scope_defers_before_execution(self):
         governance = Governance(self.environment)
         governance.initialize_ledgers("2.5.0-dev.8")
+        lieutenant = governance.roles["SOLDIERS_MAINTAINER"]
+        self.assertEqual(lieutenant["name"], "Project Anissa | Lieutenant")
+        self.assertEqual(lieutenant["ledger"], "soldiers_maintainer.json")
         decision = governance.evaluate_scope(
             "SOLDIERS_MAINTAINER",
             ["soldiers/thula/src/sync.py", "project/projections.py"],
