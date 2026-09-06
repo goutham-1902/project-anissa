@@ -15,7 +15,8 @@ anything enters the canonical agenda.
 
 - Resolve settings, private state and publications through
   `ProjectEnvironment.worker("lucan")`.
-- Publish only through `project.discovery_contract`.
+- Validate results through `project.discovery_contract` and publish only through
+  `project.discovery_publication` after a later activation gate authorizes it.
 - Never import the workbook gateway or agenda implementation, read or mutate
   campaign state, create tasks, mark work complete, or message Anissa role tasks.
 - Never submit applications, send messages as the user, or produce finished

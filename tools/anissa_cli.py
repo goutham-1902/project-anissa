@@ -70,6 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[
             "status", "weekday-morning", "weekday-reminder", "weekend-morning",
             "weekend-reminder", "weekday-close", "weekly-audit", "plan-impact",
+            "opportunity-discovery",
         ],
     )
     snapshot.add_argument("--week-ending", type=_iso_date)

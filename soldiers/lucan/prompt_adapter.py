@@ -9,6 +9,7 @@ from typing import Mapping
 from project.discovery_brief import DiscoveryBrief, validate_discovery_brief
 from project.discovery_contract import (
     DiscoveryPublication,
+    discovery_publication_payload,
     discovery_candidate_id,
     validate_discovery_publication,
 )
@@ -206,17 +207,6 @@ def assemble_shadow_publication(
 
 
 def publication_payload(publication: DiscoveryPublication) -> dict:
-    """Return a JSON-ready projection of an already validated publication."""
+    """Compatibility alias for the shared contract's canonical JSON projection."""
 
-    payload = asdict(publication)
-    payload["started_at"] = publication.started_at.isoformat()
-    payload["completed_at"] = publication.completed_at.isoformat()
-    for index, candidate in enumerate(publication.candidates):
-        payload["candidates"][index]["deadline"] = (
-            candidate.deadline.isoformat() if candidate.deadline else None
-        )
-        for evidence_index, evidence in enumerate(candidate.evidence):
-            payload["candidates"][index]["evidence"][evidence_index]["checked_at"] = (
-                evidence.checked_at.isoformat()
-            )
-    return payload
+    return discovery_publication_payload(publication)

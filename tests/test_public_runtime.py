@@ -7,6 +7,7 @@ import unittest
 from openpyxl import load_workbook
 
 from anissa.core import AnissaCore
+from logic.discovery import discovery_context
 from logic.workbook_io import WorkbookGateway
 from project.environment import RELEASE_ROOT, resolve_environment
 from project.dispatch import DispatchGate
@@ -84,6 +85,12 @@ class PublicRuntimeTests(unittest.TestCase):
         self.assertEqual(settings["publication"]["state"], "SHADOW")
         self.assertIsNone(settings["thread_id"])
         self.assertIsNone(settings["automation_id"])
+        context = discovery_context(
+            lucan.publication_root,
+            agenda_id="graduate_applications",
+        )
+        self.assertEqual(context["availability"], "unavailable")
+        self.assertEqual(context["data_policy"], "ignore")
 
         root_contract = (RELEASE_ROOT / "AGENTS.md").read_text(encoding="utf-8")
         readme = (RELEASE_ROOT / "README.md").read_text(encoding="utf-8")

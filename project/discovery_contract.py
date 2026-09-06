@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Mapping
 from urllib.parse import urlsplit
@@ -253,3 +253,20 @@ def validate_discovery_publication(payload: object) -> DiscoveryPublication:
         candidates=candidates,
         source_failures=failures,
     )
+
+
+def discovery_publication_payload(publication: DiscoveryPublication) -> dict:
+    """Return the canonical JSON-ready form of a validated publication."""
+
+    payload = asdict(publication)
+    payload["started_at"] = publication.started_at.isoformat()
+    payload["completed_at"] = publication.completed_at.isoformat()
+    for index, candidate in enumerate(publication.candidates):
+        payload["candidates"][index]["deadline"] = (
+            candidate.deadline.isoformat() if candidate.deadline else None
+        )
+        for evidence_index, evidence in enumerate(candidate.evidence):
+            payload["candidates"][index]["evidence"][evidence_index]["checked_at"] = (
+                evidence.checked_at.isoformat()
+            )
+    return payload

@@ -39,7 +39,10 @@ mode with no task binding or automation. A private instance may bind one
 persistent `Lucan` task for explicitly assigned manual shadow trials; its raw
 result is validated locally and never mutates an agenda directly. The adapter
 validates compact briefs and returned results without acting as a browser or
-executor itself.
+executor itself. A shared publication module provides checksum-coherent atomic
+handoff, conflicting-replay protection and last-known-good retention. Anissa
+loads its bounded output only through an explicit opportunity-discovery
+snapshot; routine operations do not carry discovery context.
 
 ## Install and verify
 

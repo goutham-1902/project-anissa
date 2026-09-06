@@ -452,6 +452,9 @@ class GraduateApplicationsAgenda:
             "india_ratio": control.get("india_ratio"),
         }
 
+        if workflow == "opportunity-discovery":
+            return base
+
         if workflow == "weekday-reminder":
             due = [
                 row for row in open_rows

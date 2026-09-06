@@ -6,9 +6,10 @@ publication. Anissa remains responsible for verification, ranking and every
 campaign mutation.
 
 The brief and publication interfaces are `project.discovery_brief` and
-`project.discovery_contract`. `prompt_adapter.py` converts a validated brief to
-one bounded prompt and supplies trusted metadata plus deterministic IDs to a raw
-result. It does not browse, schedule or mutate state.
+`project.discovery_contract`; atomic durable handoff is owned by
+`project.discovery_publication`. `prompt_adapter.py` converts a validated brief
+to one bounded prompt and supplies trusted metadata plus deterministic IDs to a
+raw result. It does not browse, schedule or mutate state.
 
 The brief carries only a bounded cache of currently relevant known candidates.
 It is a search-efficiency hint, not the deduplication authority; the publication

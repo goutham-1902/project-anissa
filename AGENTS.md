@@ -41,13 +41,18 @@ automation or publish a live result. A private instance may bind one persistent
 to General for validation and cannot write the publication slot. Discovery
 candidates remain evidence inputs, not campaign decisions. The prompt adapter
 may render a supplied brief and validate a returned result; it does not itself
-authorize browsing or publication.
+authorize browsing or publication. When separately activated, durable results
+must use the shared discovery-publication module. Anissa consumes only its
+bounded discovery context, independently applies campaign policy, and ignores
+SHADOW, missing, corrupt or expired data. A failed refresh must never become a
+false zero.
 
 ## Efficiency
 
 Use code for IDs, deduplication, dates, arithmetic, state transitions and compact
 projections. Load only the policy and private-instance evidence required for the
-current workflow.
+current workflow. Load Lucan output only during explicit discovery evaluation,
+not routine allocation, reminder, close or audit workflows.
 
 ## Maintainer publication
 

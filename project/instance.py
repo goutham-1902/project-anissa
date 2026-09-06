@@ -9,6 +9,7 @@ from pathlib import Path
 from openpyxl import Workbook
 
 from project.environment import ProjectEnvironment
+from project.discovery_publication import empty_discovery_status
 from project.telemetry_contract import FIELDS
 
 
@@ -102,12 +103,7 @@ def _empty_telemetry(environment: ProjectEnvironment) -> None:
 def _empty_discovery_publication(environment: ProjectEnvironment) -> None:
     lucan = environment.worker("lucan")
     lucan.publication_root.mkdir(parents=True, exist_ok=True)
-    _json(lucan.publication_root / "status.json", {
-        "schema_version": 1,
-        "worker_id": "lucan",
-        "state": "SETUP",
-        "last_publication": None,
-    })
+    _json(lucan.publication_root / "status.json", empty_discovery_status())
 
 
 def initialize_instance(
