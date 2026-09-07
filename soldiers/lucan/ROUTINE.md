@@ -6,7 +6,8 @@ This is an activation-ready execution sequence, not an active schedule.
    read the workbook, profile source documents or an agenda implementation.
 2. Run `soldiers/lucan/cli.py prepare --brief BRIEF.json` and use exactly the
    returned model, reasoning effort and prompt. Search the web when the prompt
-   requires it; do not enter ChatGPT Work mode.
+   requires it; stop at the returned `max_web_tool_calls` limit even when a
+   source fails, and do not enter ChatGPT Work mode.
 3. Save only the returned plain JSON result for validation, then run
    `soldiers/lucan/cli.py finalize` with the brief, result and timezone-aware run
    timestamps.

@@ -13,9 +13,11 @@ raw result. `cli.py` is the narrow execution adapter: it prepares that prompt,
 validates the returned JSON and applies the SHADOW/LIVE publication gate. It does
 not browse, schedule or mutate campaign state.
 
-The brief carries only a bounded cache of currently relevant known candidates.
-It is a search-efficiency hint, not the deduplication authority; the publication
-contract and agenda gateway retain deterministic cross-source deduplication.
+The brief carries only a bounded cache of currently relevant known candidates
+and a hard search plan: total web-tool calls, batched-query size, verification
+reserve and selected source families. These are efficiency controls, not the
+deduplication authority; the publication contract and agenda gateway retain
+deterministic cross-source deduplication.
 
 The worker is currently shadow-only. A private instance may bind one persistent
 `Lucan` task for explicitly assigned manual trials; the task returns raw JSON to

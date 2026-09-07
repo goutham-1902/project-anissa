@@ -22,6 +22,8 @@ RAW_CANDIDATE_FIELDS = {
     "discovery_url", "official_url", "funding_text", "eligibility_text",
     "relevance_note", "verification_state", "cautions", "evidence",
 }
+RAW_EVIDENCE_FIELDS = {"url", "source_kind", "claim"}
+LEGACY_RAW_EVIDENCE_FIELDS = {*RAW_EVIDENCE_FIELDS, "checked_at"}
 DOMESTIC_ONLY = re.compile(
     r"\b(?:domestic[- ]only|domestic (?:candidates|applicants|students) only|"
     r"only domestic (?:candidates|applicants|students))\b",
@@ -41,6 +43,7 @@ class PromptPackage:
     reasoning_effort: str
     prompt: str
     approximate_input_tokens: int
+    max_web_tool_calls: int | None
 
 
 def execution_channel(settings: object) -> str:
@@ -89,6 +92,8 @@ def _brief_payload(brief: DiscoveryBrief) -> dict:
     payload = asdict(brief)
     if brief.domestic_eligibility_countries is None:
         payload.pop("domestic_eligibility_countries")
+    if brief.search_plan is None:
+        payload.pop("search_plan")
     payload["created_at"] = brief.created_at.isoformat()
     payload["search_since"] = brief.search_since.isoformat() if brief.search_since else None
     for index, candidate in enumerate(brief.known_candidates):
@@ -103,6 +108,20 @@ def build_prompt(brief_payload: object, settings: object) -> PromptPackage:
 
     brief = validate_discovery_brief(brief_payload)
     model, effort = _profile(settings, brief.run_kind)
+    if brief.search_plan is not None:
+        configured_sources = settings.get("source_rotation", [])
+        if not isinstance(configured_sources, list) or not all(
+            isinstance(item, str) and item.strip() for item in configured_sources
+        ):
+            raise PromptAdapterError("settings.source_rotation is invalid")
+        unsupported = sorted(
+            set(brief.search_plan.source_families) - set(configured_sources)
+        )
+        if unsupported:
+            raise PromptAdapterError(
+                "brief search_plan contains unconfigured source families: "
+                + ", ".join(unsupported)
+            )
     compact_brief = json.dumps(
         _brief_payload(brief), ensure_ascii=False, separators=(",", ":")
     )
@@ -116,7 +135,7 @@ def build_prompt(brief_payload: object, settings: object) -> PromptPackage:
     )
     instructions = [
         "You are Lucan, Project Anissa's research-only opportunity-discovery worker.",
-        "Use web search for this assignment. Search broadly enough to satisfy each enabled track, then verify material claims against primary official sources.",
+        "Use web search for this assignment, following BRIEF_JSON.search_plan as a hard execution budget when it is present.",
         "Return new candidates or material changes to known candidates only. Treat indexes and professional networks as discovery leads, not primary verification.",
         "Never rank for the campaign, recommend applying, create tasks, change application status, draft application prose, or infer missing facts.",
         "If a source is unavailable or evidence conflicts, preserve the caution and report PARTIAL instead of guessing. PRIMARY_VERIFIED requires an official URL and OFFICIAL evidence.",
@@ -124,10 +143,32 @@ def build_prompt(brief_payload: object, settings: object) -> PromptPackage:
         "Return exactly one JSON object with fields status, candidates, source_failures and no prose or Markdown fence.",
         "Each candidate must contain exactly: institution, title, route, country, location, deadline, discovery_url, official_url, funding_text, eligibility_text, relevance_note, verification_state, cautions, evidence.",
         "Use null for an unknown deadline or official_url. verification_state must be DISCOVERED, NEEDS_VERIFICATION, or PRIMARY_VERIFIED.",
-        "Each evidence record must contain exactly url, source_kind, checked_at, claim. source_kind must be OFFICIAL, LAB, INDEX, or PROFESSIONAL_NETWORK; checked_at must include a timezone.",
+        "Each evidence record must contain exactly url, source_kind, claim. source_kind must be OFFICIAL, LAB, INDEX, or PROFESSIONAL_NETWORK; the local adapter supplies the trusted checked_at timestamp.",
         "status must be COMPLETE with no source_failures, PARTIAL with at least one source failure, or FAILED with failures and no candidates.",
         "Do not generate candidate IDs or envelope metadata; the local adapter supplies and validates them deterministically.",
+        "For degree routes, put any unverified exact start or joining date in cautions; never imply route-timing eligibility from a broad intake year.",
+        "Apply timing rules only to their matching track: never compare a degree route with the India-bridge window or an India role with doctoral-route timing.",
     ]
+    if brief.search_plan is not None:
+        plan = brief.search_plan
+        discovery_limit = plan.max_web_tool_calls - plan.verification_call_reserve
+        instructions.insert(
+            2,
+            f"Use at most {plan.max_web_tool_calls} web tool calls total; searches, "
+            "opens, finds and screenshots all count. Use no more than "
+            f"{discovery_limit} calls for discovery, batch at most "
+            f"{plan.max_queries_per_discovery_call} queries into each discovery "
+            f"call, and reserve at least {plan.verification_call_reserve} calls "
+            "for primary verification.",
+        )
+        instructions.insert(
+            3,
+            "Discover only through BRIEF_JSON.search_plan.source_families. Never "
+            "issue an empty search or no-op call; source opens and finds are valid "
+            "verification calls. Never exceed the cap to repair a failed source. "
+            "If the budget prevents track coverage or verification, return PARTIAL "
+            "and identify the uncovered track or source in source_failures.",
+        )
     if eligibility_rule is not None:
         instructions.insert(3, eligibility_rule)
     instructions.append(f"BRIEF_JSON={compact_brief}")
@@ -143,6 +184,9 @@ def build_prompt(brief_payload: object, settings: object) -> PromptPackage:
         reasoning_effort=effort,
         prompt=prompt,
         approximate_input_tokens=(len(prompt) + 3) // 4,
+        max_web_tool_calls=(
+            brief.search_plan.max_web_tool_calls if brief.search_plan else None
+        ),
     )
 
 
@@ -171,6 +215,24 @@ def _raw_result(value: object) -> Mapping[str, object]:
             raise PromptAdapterError(
                 f"model result candidates[{index}] fields are invalid"
             )
+        evidence = candidate.get("evidence")
+        if not isinstance(evidence, list) or not 1 <= len(evidence) <= 12:
+            raise PromptAdapterError(
+                f"model result candidates[{index}].evidence must contain 1-12 records"
+            )
+        for evidence_index, item in enumerate(evidence):
+            evidence_row = _mapping(
+                item,
+                f"model result candidates[{index}].evidence[{evidence_index}]",
+            )
+            if set(evidence_row) not in (
+                RAW_EVIDENCE_FIELDS,
+                LEGACY_RAW_EVIDENCE_FIELDS,
+            ):
+                raise PromptAdapterError(
+                    f"model result candidates[{index}].evidence[{evidence_index}] "
+                    "fields are invalid"
+                )
     return row
 
 
@@ -190,6 +252,15 @@ def assemble_publication(
     candidates = []
     for raw in result["candidates"]:
         candidate = dict(raw)
+        candidate["evidence"] = [
+            {
+                "url": evidence["url"],
+                "source_kind": evidence["source_kind"],
+                "checked_at": completed_at.isoformat(),
+                "claim": evidence["claim"],
+            }
+            for evidence in candidate["evidence"]
+        ]
         if brief.domestic_eligibility_countries is not None:
             eligible_countries = {
                 country.casefold() for country in brief.domestic_eligibility_countries

@@ -25,10 +25,13 @@ anything enters the canonical agenda.
 
 ## Evidence and efficiency
 
-Use staged filtering and delta searches. Prefer official programme, vacancy,
-institution, funding and laboratory sources for material claims. Indexes and
-professional networks may discover candidates but do not by themselves justify
-`PRIMARY_VERIFIED`. Preserve conflicts and label uncertainty.
+Use staged filtering and delta searches. Obey the brief's web-tool-call cap,
+batched-query limit, verification reserve and selected source families as hard
+limits. A bounded partial result is preferable to another search round. Prefer
+official programme, vacancy, institution, funding and laboratory sources for
+material claims. Indexes and professional networks may discover candidates but
+do not by themselves justify `PRIMARY_VERIFIED`. Preserve conflicts and label
+uncertainty.
 
 Return at most 40 deterministic, cross-source-deduplicated candidates. Each
 candidate needs evidence, explicit verification state and cautions. Do not emit

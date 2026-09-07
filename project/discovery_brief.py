@@ -9,12 +9,15 @@ from typing import Mapping
 from project.discovery_contract import MAX_CANDIDATES, RUN_KINDS
 
 
-SCHEMA_VERSION = 2
-SUPPORTED_SCHEMA_VERSIONS = {1, SCHEMA_VERSION}
+SCHEMA_VERSION = 3
+SUPPORTED_SCHEMA_VERSIONS = {1, 2, SCHEMA_VERSION}
 MAX_TRACKS = 4
 MAX_PROFILE_FACTS = 20
 MAX_HARD_RULES = 30
 MAX_KNOWN_CANDIDATES = 30
+MAX_WEB_TOOL_CALLS = 6
+MAX_QUERIES_PER_CALL = 4
+MAX_SOURCE_FAMILIES = 4
 TRACK_ID = re.compile(r"^[A-Z][A-Z0-9_]{1,31}$")
 ASSIGNMENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{2,79}$")
 
@@ -43,6 +46,14 @@ class KnownCandidate:
 
 
 @dataclass(frozen=True)
+class SearchPlan:
+    max_web_tool_calls: int
+    max_queries_per_discovery_call: int
+    verification_call_reserve: int
+    source_families: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DiscoveryBrief:
     schema_version: int
     worker_id: str
@@ -54,6 +65,7 @@ class DiscoveryBrief:
     objective: str
     max_candidates: int
     domestic_eligibility_countries: tuple[str, ...] | None
+    search_plan: SearchPlan | None
     profile_facts: tuple[str, ...]
     hard_rules: tuple[str, ...]
     tracks: tuple[DiscoveryTrack, ...]
@@ -177,6 +189,63 @@ def _known_candidate(value: object, index: int) -> KnownCandidate:
     )
 
 
+def _bounded_integer(value: object, label: str, *, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool):
+        raise DiscoveryBriefError(f"{label} must be an integer")
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise DiscoveryBriefError(f"{label} must be an integer") from exc
+    if result != value or not minimum <= result <= maximum:
+        raise DiscoveryBriefError(
+            f"{label} must be between {minimum} and {maximum}"
+        )
+    return result
+
+
+def _search_plan(value: object) -> SearchPlan:
+    label = "brief.search_plan"
+    row = _object(value, label)
+    _exact_keys(
+        row,
+        {
+            "max_web_tool_calls",
+            "max_queries_per_discovery_call",
+            "verification_call_reserve",
+            "source_families",
+        },
+        label,
+    )
+    max_calls = _bounded_integer(
+        row["max_web_tool_calls"],
+        f"{label}.max_web_tool_calls",
+        minimum=2,
+        maximum=MAX_WEB_TOOL_CALLS,
+    )
+    verification_reserve = _bounded_integer(
+        row["verification_call_reserve"],
+        f"{label}.verification_call_reserve",
+        minimum=1,
+        maximum=max_calls - 1,
+    )
+    return SearchPlan(
+        max_web_tool_calls=max_calls,
+        max_queries_per_discovery_call=_bounded_integer(
+            row["max_queries_per_discovery_call"],
+            f"{label}.max_queries_per_discovery_call",
+            minimum=1,
+            maximum=MAX_QUERIES_PER_CALL,
+        ),
+        verification_call_reserve=verification_reserve,
+        source_families=_strings(
+            row["source_families"],
+            f"{label}.source_families",
+            limit=MAX_SOURCE_FAMILIES,
+            max_chars=120,
+        ),
+    )
+
+
 def validate_discovery_brief(payload: object) -> DiscoveryBrief:
     """Validate and freeze one bounded, agenda-authored Lucan assignment."""
 
@@ -189,8 +258,10 @@ def validate_discovery_brief(payload: object) -> DiscoveryBrief:
         "created_at", "search_since", "objective", "max_candidates",
         "profile_facts", "hard_rules", "tracks", "known_candidates",
     }
-    if schema_version == SCHEMA_VERSION:
+    if schema_version >= 2:
         expected.add("domestic_eligibility_countries")
+    if schema_version == SCHEMA_VERSION:
+        expected.add("search_plan")
     _exact_keys(
         row,
         expected,
@@ -259,6 +330,11 @@ def validate_discovery_brief(payload: object) -> DiscoveryBrief:
                 limit=8,
                 max_chars=80,
             )
+            if schema_version >= 2
+            else None
+        ),
+        search_plan=(
+            _search_plan(row["search_plan"])
             if schema_version == SCHEMA_VERSION
             else None
         ),

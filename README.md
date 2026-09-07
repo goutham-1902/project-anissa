@@ -38,7 +38,8 @@ telemetry and Lucan for bounded opportunity discovery. Lucan ships in shadow
 mode with no task binding or automation. A private instance may bind one
 persistent `Lucan` task for explicitly assigned manual shadow trials; its raw
 result is validated locally and never mutates an agenda directly. The execution
-adapter prepares compact typed prompts, validates returned results and permits
+adapter prepares compact typed prompts with a hard web-call budget and per-run
+source rotation, validates returned results and permits
 publication only when private mode, automation and publication settings form a
 coherent LIVE gate. Browsing remains in the persistent task. A shared
 publication module provides checksum-coherent atomic handoff,
