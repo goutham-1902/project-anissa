@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "Lucan",
   "pronouns": "he/him",
   "mode": "SETUP",
@@ -21,6 +21,21 @@
     "state": "SHADOW",
     "contract": "project.discovery_contract",
     "max_candidates": 40
+  },
+  "cadence": {
+    "binding_state": "PROPOSED",
+    "timezone": "Asia/Kolkata",
+    "weekly_runs": [
+      {"day": "Monday", "time": "06:30"},
+      {"day": "Thursday", "time": "06:30"}
+    ]
+  },
+  "notification_policy": {
+    "complete_no_change": "QUIET",
+    "complete_with_delta": "REPORT",
+    "partial": "REPORT",
+    "failed": "REPORT",
+    "adapter_or_publication_error": "REPORT"
   },
   "source_rotation": [
     "official institution and laboratory pages",

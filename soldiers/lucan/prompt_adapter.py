@@ -43,6 +43,29 @@ class PromptPackage:
     approximate_input_tokens: int
 
 
+def execution_channel(settings: object) -> str:
+    """Return the only publication channel allowed by coherent worker settings."""
+
+    row = _mapping(settings, "settings")
+    if row.get("schema_version") != 2:
+        raise PromptAdapterError("Lucan settings schema_version is unsupported")
+    mode = str(row.get("mode") or "").strip().upper()
+    automation = str(row.get("automation_status") or "").strip().upper()
+    publication = _mapping(row.get("publication"), "settings.publication")
+    channel = str(publication.get("state") or "").strip().upper()
+    coherent = {
+        ("SETUP", "DISABLED", "SHADOW"): "SHADOW",
+        ("LIVE", "ACTIVE", "LIVE"): "LIVE",
+    }
+    try:
+        return coherent[(mode, automation, channel)]
+    except KeyError as exc:
+        raise PromptAdapterError(
+            "Lucan settings are incoherent; expected disabled SETUP/SHADOW or "
+            "active LIVE/LIVE"
+        ) from exc
+
+
 def _mapping(value: object, label: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise PromptAdapterError(f"{label} must be an object")
@@ -51,11 +74,7 @@ def _mapping(value: object, label: str) -> Mapping[str, object]:
 
 def _profile(settings: object, run_kind: str) -> tuple[str, str]:
     row = _mapping(settings, "settings")
-    if row.get("mode") != "SETUP" or row.get("automation_status") != "DISABLED":
-        raise PromptAdapterError("Gate 9 permits only disabled SETUP settings")
-    publication = _mapping(row.get("publication"), "settings.publication")
-    if publication.get("state") != "SHADOW":
-        raise PromptAdapterError("Gate 9 permits only SHADOW publication")
+    execution_channel(row)
     model_policy = _mapping(row.get("model_policy"), "settings.model_policy")
     key = "scheduled" if run_kind == "SCHEDULED_SWEEP" else "assigned_elaborate"
     profile = _mapping(model_policy.get(key), f"settings.model_policy.{key}")
@@ -155,7 +174,7 @@ def _raw_result(value: object) -> Mapping[str, object]:
     return row
 
 
-def assemble_shadow_publication(
+def assemble_publication(
     brief_payload: object,
     model_result: object,
     *,
@@ -204,6 +223,23 @@ def assemble_shadow_publication(
         "candidates": candidates,
         "source_failures": result["source_failures"],
     })
+
+
+def assemble_shadow_publication(
+    brief_payload: object,
+    model_result: object,
+    *,
+    started_at: datetime,
+    completed_at: datetime,
+) -> DiscoveryPublication:
+    """Compatibility alias retained for earlier shadow-trial callers."""
+
+    return assemble_publication(
+        brief_payload,
+        model_result,
+        started_at=started_at,
+        completed_at=completed_at,
+    )
 
 
 def publication_payload(publication: DiscoveryPublication) -> dict:

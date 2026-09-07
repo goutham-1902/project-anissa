@@ -41,7 +41,8 @@ Lucan is in `SETUP` and publication state `SHADOW`. The persistent task titled
 the raw JSON result to General. Do not write that result to the publication
 slot. General validates and evaluates it first.
 
-The offline prompt adapter may validate a supplied bounded brief, render a
-prompt and validate synthetic or returned output. It is not itself a browser or
-executor. Do not create an automation, run an autonomous search or publish a
-live result until a later explicit activation gate verifies the full workflow.
+The execution adapter may validate a supplied bounded brief, render a prompt and
+validate synthetic or returned output. Browsing remains the responsibility of
+the persistent Lucan task. The adapter must stay non-publishing in SHADOW. Do not
+create an automation, run an autonomous search or publish a live result until a
+later explicit activation gate verifies the full workflow.

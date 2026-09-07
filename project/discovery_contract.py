@@ -261,9 +261,17 @@ def discovery_publication_payload(publication: DiscoveryPublication) -> dict:
     payload = asdict(publication)
     payload["started_at"] = publication.started_at.isoformat()
     payload["completed_at"] = publication.completed_at.isoformat()
+    payload["candidates"] = list(payload["candidates"])
+    payload["source_failures"] = list(payload["source_failures"])
     for index, candidate in enumerate(publication.candidates):
         payload["candidates"][index]["deadline"] = (
             candidate.deadline.isoformat() if candidate.deadline else None
+        )
+        payload["candidates"][index]["cautions"] = list(
+            payload["candidates"][index]["cautions"]
+        )
+        payload["candidates"][index]["evidence"] = list(
+            payload["candidates"][index]["evidence"]
         )
         for evidence_index, evidence in enumerate(candidate.evidence):
             payload["candidates"][index]["evidence"][evidence_index]["checked_at"] = (

@@ -39,11 +39,13 @@ A worker configured as `SETUP` or `SHADOW` must not run autonomously, bind an
 automation or publish a live result. A private instance may bind one persistent
 `Lucan` task for an explicitly assigned manual shadow brief; it returns raw JSON
 to General for validation and cannot write the publication slot. Discovery
-candidates remain evidence inputs, not campaign decisions. The prompt adapter
-may render a supplied brief and validate a returned result; it does not itself
-authorize browsing or publication. When separately activated, durable results
-must use the shared discovery-publication module. Anissa consumes only its
-bounded discovery context, independently applies campaign policy, and ignores
+candidates remain evidence inputs, not campaign decisions. The execution
+adapter may render a supplied brief and validate a returned result; browsing
+remains in the persistent Lucan task. SHADOW validation cannot write the
+publication slot. When separately activated by coherent private settings,
+durable results must use the shared discovery-publication module. Anissa
+consumes only its bounded discovery context, independently applies campaign
+policy, and ignores
 SHADOW, missing, corrupt or expired data. A failed refresh must never become a
 false zero.
 

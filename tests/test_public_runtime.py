@@ -18,6 +18,7 @@ from project.telemetry_contract import read_publication
 from soldiers.thula import cli as thula_cli
 from soldiers.thula.src import accounting as thula_accounting
 from soldiers.thula.src.dashboard_server import dashboard_build_id, dashboard_health
+from soldiers.lucan import cli as lucan_cli
 from soldiers.lucan.prompt_adapter import build_prompt
 
 
@@ -146,7 +147,10 @@ class PublicRuntimeTests(unittest.TestCase):
         package = build_prompt(brief, settings)
         self.assertEqual(validated.assignment_id, package.assignment_id)
         self.assertLess(package.approximate_input_tokens, 4500)
-        self.assertFalse((RELEASE_ROOT / "soldiers" / "lucan" / "cli.py").exists())
+        self.assertTrue(callable(lucan_cli.build_parser))
+        self.assertTrue(callable(lucan_cli.main))
+        self.assertEqual(settings["cadence"]["binding_state"], "PROPOSED")
+        self.assertIsNone(settings["automation_id"])
 
     def test_dashboard_includes_bounded_weekly_history_without_private_assets(self):
         dashboard = RELEASE_ROOT / "soldiers" / "thula" / "dashboard"
