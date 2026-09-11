@@ -1,20 +1,20 @@
 {
   "GENERAL": {
-    "name": "Project Anissa | General",
+    "name": "Argal",
     "ledger": "general.json",
     "responsibility": "Global architecture, cross-module changes and guarded public releases",
     "publication_duty": "Generate, audit and push the allowlisted public projection after verification"
   },
   "ANISSA_MAINTAINER": {
-    "name": "Project Anissa | Anissa Maintainer",
+    "name": "Regent Thrag",
     "ledger": "anissa_maintainer.json",
     "responsibility": "Anissa Core, roles, agendas and campaign gateway",
-    "publication_duty": "Route verified public-safe fixes to General; keep private-instance and private-persona changes local"
+    "publication_duty": "Route verified public-safe fixes to Argal; keep private-instance and private-persona changes local"
   },
   "SOLDIERS_MAINTAINER": {
-    "name": "Project Anissa | Lieutenant",
+    "name": "General Kreg",
     "ledger": "soldiers_maintainer.json",
     "responsibility": "Thula, Lucan and future capability-scoped workers",
-    "publication_duty": "Route verified public-safe fixes to General; keep worker private state and private-instance changes local"
+    "publication_duty": "Route verified public-safe fixes to Argal; keep worker private state and private-instance changes local"
   }
 }

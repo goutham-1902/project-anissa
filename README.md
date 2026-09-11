@@ -77,9 +77,9 @@ authorization before binding scheduled work.
 
 ## Maintenance and publication
 
-General, Anissa Maintainer and Lieutenant evaluate file scope before
+Argal, Regent Thrag and General Kreg evaluate file scope before
 execution. Every verified public-safe fix must reach the public release. Atomic
-maintainers hand it to General, who alone generates the allowlisted projection,
+maintainers hand it to Argal, who alone generates the allowlisted projection,
 runs the privacy audit and pushes it. Private-instance, private-persona and
 worker-private changes remain local.
 

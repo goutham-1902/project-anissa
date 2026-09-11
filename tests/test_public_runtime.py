@@ -179,9 +179,9 @@ class PublicRuntimeTests(unittest.TestCase):
     def test_maintainer_scope_defers_before_execution(self):
         governance = Governance(self.environment)
         governance.initialize_ledgers("2.5.0-dev.8")
-        lieutenant = governance.roles["SOLDIERS_MAINTAINER"]
-        self.assertEqual(lieutenant["name"], "Project Anissa | Lieutenant")
-        self.assertEqual(lieutenant["ledger"], "soldiers_maintainer.json")
+        general_kreg = governance.roles["SOLDIERS_MAINTAINER"]
+        self.assertEqual(general_kreg["name"], "General Kreg")
+        self.assertEqual(general_kreg["ledger"], "soldiers_maintainer.json")
         decision = governance.evaluate_scope(
             "SOLDIERS_MAINTAINER",
             ["soldiers/thula/src/sync.py", "project/projections.py"],

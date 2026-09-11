@@ -2,8 +2,12 @@
 
 ## Maintainer-task routing
 
-`Project Anissa | Lieutenant` maintains capability-scoped workers. Its stable
-governance identifier remains `SOLDIERS_MAINTAINER`; General still owns the
+`Argal` is the global maintenance and guarded-publication task, retaining the
+stable governance identifier `GENERAL`. `Regent Thrag` is the Anissa-specific
+maintenance task, retaining `ANISSA_MAINTAINER`.
+
+`General Kreg` maintains capability-scoped workers. Its stable governance
+identifier remains `SOLDIERS_MAINTAINER`; Argal still owns the
 guarded public-release seam.
 
 ## Identity and state
@@ -38,7 +42,7 @@ inactivity and never becomes a false zero.
 A worker configured as `SETUP` or `SHADOW` must not run autonomously, bind an
 automation or publish a live result. A private instance may bind one persistent
 `Lucan` task for an explicitly assigned manual shadow brief; it returns raw JSON
-to General for validation and cannot write the publication slot. Discovery
+to Argal for validation and cannot write the publication slot. Discovery
 candidates remain evidence inputs, not campaign decisions. The execution
 adapter may render a supplied brief and validate a returned result; browsing
 remains in the persistent Lucan task. SHADOW validation cannot write the
@@ -59,7 +63,7 @@ not routine allocation, reminder, close or audit workflows.
 ## Maintainer publication
 
 Evaluate scope before execution. Every verified public-safe fix must be routed
-to the public release. Atomic maintainers hand publication to General; General
+to the public release. Atomic maintainers hand publication to Argal; Argal
 alone generates, audits and pushes the allowlisted public projection. Never
 publish private-instance state, private presentation material or worker-private
 state.
