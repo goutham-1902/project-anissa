@@ -23,6 +23,23 @@ def _thaw(value):
 
 
 @dataclass(frozen=True)
+class AgendaSummaryProjection:
+    agenda_id: str
+    name: str
+    lifecycle: str
+    allocation_weight: float
+    selected: bool
+
+
+@dataclass(frozen=True)
+class PortfolioProjection:
+    default_agenda_id: str
+    selected_agenda_id: str
+    active_allocation_weight: float
+    agendas: tuple[AgendaSummaryProjection, ...]
+
+
+@dataclass(frozen=True)
 class TaskProjection:
     agenda_id: str
     task_id: str
@@ -124,7 +141,7 @@ class CompletedTaskCreditProjection:
 
 
 @dataclass(frozen=True)
-class AgendaProjection:
+class GraduateApplicationsProjection:
     agenda_id: str
     projection_type: str
     on: date
@@ -139,8 +156,18 @@ class AgendaProjection:
     _compatibility_payload: Mapping[str, object]
 
     @classmethod
-    def create(cls, *, compatibility_payload: dict, **values) -> "AgendaProjection":
+    def create(
+        cls,
+        *,
+        compatibility_payload: dict,
+        **values,
+    ) -> "GraduateApplicationsProjection":
         return cls(_compatibility_payload=_freeze(compatibility_payload), **values)
 
     def compatibility_payload(self) -> dict:
         return _thaw(self._compatibility_payload)
+
+
+# Temporary source-compatibility name while callers migrate to the explicit
+# Graduate Applications detail projection.
+AgendaProjection = GraduateApplicationsProjection

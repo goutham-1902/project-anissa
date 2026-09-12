@@ -5,6 +5,7 @@
 - **Role**: a permanent interaction surface, not a separate memory or agent.
 - **Portfolio**: agenda registration, lifecycle and cross-agenda allocation.
 - **Agenda**: owner of its tasks, evidence, state and mutation gateway.
+- **Agenda Catalog**: lazy validation and selection of one registered agenda.
 - **Worker**: a narrow capability process publishing typed results.
 - **Projection**: a read-only normalized interface between components.
 - **Project Environment**: the resolved release/private-instance pairing.

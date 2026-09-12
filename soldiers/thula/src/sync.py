@@ -129,6 +129,20 @@ def record_stale(*, status_path: Path, stage: str, message: str,
     return status
 
 
+def refresh_completed_task_credit(*, store_path: Path, worklog_path: Path,
+                                  completed_task_credit: tuple) -> dict:
+    """Republish cached Forest sessions with the latest typed task credit."""
+    if not Path(store_path).is_file():
+        raise RuntimeError(
+            "Cached Forest state is unavailable; refusing to replace the worklog"
+        )
+    rows = build_worklog(StateStore(store_path).sessions(), completed_task_credit)
+    return {
+        "row_count": len(rows),
+        "worklog_sha256": publish_worklog(worklog_path, rows),
+    }
+
+
 def run_csv_sync(*, csv_data: bytes | str, captured_at: object,
                  source_file_id: str, source_modified_at: str,
                  store_path: Path, worklog_path: Path, status_path: Path,
@@ -148,12 +162,23 @@ def run_csv_sync(*, csv_data: bytes | str, captured_at: object,
     }
     if (previous_source.get("file_id") == identity["file_id"] and
             previous_source.get("modified_at") == identity["modified_at"]):
-        return record_stale(
+        publication = refresh_completed_task_credit(
+            store_path=store_path,
+            worklog_path=worklog_path,
+            completed_task_credit=completed_task_credit,
+        )
+        status = record_stale(
             status_path=status_path,
             stage="drive",
-            message="No newer Forest export was available; the next full export will backfill missed days.",
+            message=(
+                "No newer Forest export was available; completed-task credit was "
+                "refreshed and the next full export will backfill missed Forest days."
+            ),
             now=now,
         )
+        status = {**status, **publication}
+        publish_status(status_path, status)
+        return {**status, "completed_task_credit_refreshed": True}
 
     raw = csv_data.encode("utf-8") if isinstance(csv_data, str) else csv_data
     payload = parse_forest_csv(raw, captured_at=captured_at)

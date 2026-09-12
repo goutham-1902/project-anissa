@@ -51,6 +51,23 @@ class Governance:
         for field in ("projection_builder", "safety_gate", "eligibility", "rule"):
             if not str(publication.get(field) or "").strip():
                 raise RuntimeError(f"Publication policy is missing {field}")
+        coordination = self.policy.get("coordination", {})
+        if coordination.get("transport") != "persistent_task_messages":
+            raise RuntimeError("Maintainer coordination transport is invalid")
+        required_checkpoints = {
+            "SCOPE", "ACK", "HANDOFF", "RECEIVED",
+            "INTEGRATED_OR_REPAIR_REQUIRED", "PUBLISHED",
+        }
+        if set(coordination.get("checkpoints") or ()) != required_checkpoints:
+            raise RuntimeError("Maintainer coordination checkpoints are invalid")
+        for field in (
+            "single_writer_per_file_scope",
+            "general_closes_cross_scope_work",
+        ):
+            if coordination.get(field) is not True:
+                raise RuntimeError(f"Maintainer coordination must enable {field}")
+        if coordination.get("silence_is_acceptance") is not False:
+            raise RuntimeError("Maintainer silence cannot imply acceptance")
 
     def ledger_path(self, maintainer_id: str) -> Path:
         self._require_maintainer(maintainer_id)

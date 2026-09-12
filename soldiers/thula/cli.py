@@ -17,11 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from project.environment import resolve_environment
-from project.dashboard import compose_dashboard
-from project.thula_workflow import run_thula_csv_sync, run_thula_sync
 from soldiers.thula.src.dashboard_server import dashboard_build_id, run_server
-from soldiers.thula.src.forest_csv import decode_csv_base64
-from soldiers.thula.src.sync import load_payload, record_failure, record_stale
 
 
 WORKER = ROOT / "soldiers" / "thula"
@@ -145,6 +141,9 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     paths = _paths(args)
     if args.command == "sync":
+        from project.thula_workflow import run_thula_sync
+        from soldiers.thula.src.sync import load_payload
+
         result = run_thula_sync(
             environment=ENVIRONMENT,
             payload=load_payload(args.forest_json),
@@ -153,6 +152,9 @@ def main(argv=None) -> int:
         print(json.dumps(result, ensure_ascii=False, default=str))
         return 0
     if args.command == "sync-drive":
+        from project.thula_workflow import run_thula_csv_sync
+        from soldiers.thula.src.forest_csv import decode_csv_base64
+
         csv_data = (
             Path(args.forest_csv).read_bytes()
             if args.forest_csv else decode_csv_base64(args.csv_base64)
@@ -168,14 +170,20 @@ def main(argv=None) -> int:
         print(json.dumps(result, ensure_ascii=False, default=str))
         return 0
     if args.command == "record-failure":
+        from soldiers.thula.src.sync import record_failure
+
         result = record_failure(status_path=paths["status_path"], stage=args.stage, message=args.message)
         print(json.dumps(result, ensure_ascii=False, default=str))
         return 0
     if args.command == "record-stale":
+        from soldiers.thula.src.sync import record_stale
+
         result = record_stale(status_path=paths["status_path"], stage=args.stage, message=args.message)
         print(json.dumps(result, ensure_ascii=False, default=str))
         return 0
     if args.command == "snapshot":
+        from project.dashboard import compose_dashboard
+
         result = compose_dashboard(
             environment=ENVIRONMENT,
             worklog_path=DEFAULTS["worklog_path"], status_path=DEFAULTS["status_path"],

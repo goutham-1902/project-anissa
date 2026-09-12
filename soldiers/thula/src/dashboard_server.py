@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-from project.dashboard import compose_dashboard
 from project.environment import ProjectEnvironment
 
 
@@ -107,6 +106,8 @@ def make_handler(*, static_root: Path, worklog_path: Path, status_path: Path,
                 return
             if path == "/api/dashboard":
                 try:
+                    from project.dashboard import compose_dashboard
+
                     data = compose_dashboard(
                         environment=environment,
                         worklog_path=worklog_path,

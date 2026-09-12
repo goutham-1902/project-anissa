@@ -77,3 +77,15 @@ class Portfolio:
     @property
     def default(self) -> AgendaRegistration:
         return next(row for row in self.agendas if row.agenda_id == self.default_agenda_id)
+
+    def registration(self, agenda_id: str | None = None) -> AgendaRegistration:
+        """Return one explicit registration or the default without guessing."""
+
+        requested = self.default_agenda_id if agenda_id is None else str(agenda_id).strip()
+        selected = next(
+            (row for row in self.agendas if row.agenda_id == requested),
+            None,
+        )
+        if selected is None:
+            raise RuntimeError(f"Unknown agenda: {requested or '<empty>'}")
+        return selected

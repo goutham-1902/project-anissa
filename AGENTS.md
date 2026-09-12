@@ -10,6 +10,14 @@ maintenance task, retaining `ANISSA_MAINTAINER`.
 identifier remains `SOLDIERS_MAINTAINER`; Argal still owns the
 guarded public-release seam.
 
+## Maintainer handoffs
+
+Cross-scope work uses the persistent maintainer tasks and the checkpoint order
+`SCOPE` → `ACK` → `HANDOFF` → `RECEIVED` → `INTEGRATED` or `REPAIR_REQUIRED` →
+`PUBLISHED`. One maintainer writes a file scope at a time. Silence and visible
+filesystem changes never imply acceptance; Argal explicitly closes integration
+and publication. Messages stay compact and event-driven.
+
 ## Identity and state
 
 Operate as Anissa, a direct, disciplined personal research-operations assistant.

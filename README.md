@@ -10,8 +10,9 @@ and optional presentation overlay.
 ```mermaid
 flowchart LR
     Roles[Chat-role interfaces] --> Core[Anissa Core]
-    Core --> Portfolio[Agenda portfolio]
-    Portfolio --> Agenda[Agenda]
+    Core --> Portfolio[Bounded portfolio projection]
+    Core --> Catalog[Lazy agenda catalog]
+    Catalog --> Agenda[Selected agenda]
     Agenda --> Gateway[Workbook gateway]
     Gateway --> Brain[(Private canonical workbook)]
     Workers[Capability workers] --> Projection[Typed read-only projections]
@@ -82,6 +83,9 @@ execution. Every verified public-safe fix must reach the public release. Atomic
 maintainers hand it to Argal, who alone generates the allowlisted projection,
 runs the privacy audit and pushes it. Private-instance, private-persona and
 worker-private changes remain local.
+Cross-scope work uses explicit contract, acknowledgment, verified handoff,
+integration and publication checkpoints. Only one maintainer writes a file
+scope at a time, and silence never signals acceptance.
 
 Git preserves code history; keep only current source in the checkout. After a
 verified maintenance update, run `python -B soldiers/thula/cli.py ensure-server`.

@@ -25,13 +25,23 @@ class WorkerPaths:
 
 
 @dataclass(frozen=True)
+class AgendaPaths:
+    """Physical paths owned by one registered agenda."""
+
+    agenda_id: str
+    state_root: Path
+    brain_path: Path
+    profile_root: Path
+
+
+@dataclass(frozen=True)
 class ProjectEnvironment:
     """Resolve physical deployment paths behind one small, validated interface."""
 
     release_root: Path
     instance_root: Path
     layout: str
-    brain_path: Path
+    _agenda_paths: tuple[AgendaPaths, ...]
     schema_path: Path
     runtime_settings_path: Path
     role_registry_path: Path
@@ -42,12 +52,32 @@ class ProjectEnvironment:
     dispatch_slots_path: Path
     dispatch_lock_path: Path
     backup_root: Path
-    profile_root: Path
     public_persona_root: Path
     private_persona_root: Path
     private_assets_root: Path
     portfolio_path: Path
     maintainer_ledgers_root: Path
+
+    def agenda(self, agenda_id: str) -> AgendaPaths:
+        """Resolve one agenda without exposing deployment-layout conventions."""
+
+        requested = str(agenda_id).strip()
+        for paths in self._agenda_paths:
+            if paths.agenda_id == requested:
+                return paths
+        raise KeyError(f"unknown Project Anissa agenda: {agenda_id!r}")
+
+    @property
+    def brain_path(self) -> Path:
+        """Compatibility alias for the Graduate Applications campaign brain."""
+
+        return self.agenda("graduate_applications").brain_path
+
+    @property
+    def profile_root(self) -> Path:
+        """Compatibility alias for the Graduate Applications profile."""
+
+        return self.agenda("graduate_applications").profile_root
 
     def worker(self, worker_id: str) -> WorkerPaths:
         """Return one worker's paths without exposing deployment layout details."""
@@ -66,7 +96,14 @@ class ProjectEnvironment:
             release_root=root,
             instance_root=root,
             layout="existing",
-            brain_path=root / "brain" / "anissa_brain.xlsx",
+            _agenda_paths=(
+                AgendaPaths(
+                    agenda_id="graduate_applications",
+                    state_root=root,
+                    brain_path=root / "brain" / "anissa_brain.xlsx",
+                    profile_root=root / "profile",
+                ),
+            ),
             schema_path=root / "schemas" / "workbook_schema.json",
             runtime_settings_path=runtime / "settings.json",
             role_registry_path=root / "schemas" / "chat_roles.json",
@@ -90,7 +127,6 @@ class ProjectEnvironment:
             dispatch_slots_path=runtime / "dispatch_slots.json",
             dispatch_lock_path=runtime / "locks" / "dispatch_slots.lock",
             backup_root=runtime / "backups",
-            profile_root=root / "profile",
             public_persona_root=root / "persona",
             private_persona_root=root / "persona",
             private_assets_root=root / "assets" / "private",
@@ -110,7 +146,14 @@ class ProjectEnvironment:
             release_root=release,
             instance_root=instance,
             layout="external",
-            brain_path=agenda / "brain" / "anissa_brain.xlsx",
+            _agenda_paths=(
+                AgendaPaths(
+                    agenda_id="graduate_applications",
+                    state_root=agenda,
+                    brain_path=agenda / "brain" / "anissa_brain.xlsx",
+                    profile_root=agenda / "profile",
+                ),
+            ),
             schema_path=release / "schemas" / "workbook_schema.json",
             runtime_settings_path=runtime / "settings.json",
             role_registry_path=runtime / "roles.json",
@@ -134,7 +177,6 @@ class ProjectEnvironment:
             dispatch_slots_path=runtime / "dispatch_slots.json",
             dispatch_lock_path=runtime / "locks" / "dispatch_slots.lock",
             backup_root=runtime / "backups",
-            profile_root=agenda / "profile",
             public_persona_root=release / "anissa" / "persona" / "default_clean",
             private_persona_root=instance / "anissa" / "persona" / "private",
             private_assets_root=instance / "assets" / "private",

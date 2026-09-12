@@ -62,6 +62,20 @@
     ],
     "rule": "Every maintainer must route verified public-safe fixes into the public release. Atomic maintainers hand off publication to General; General alone generates, audits and pushes the allowlisted public projection. Private-instance and private-persona changes remain local."
   },
+  "coordination": {
+    "transport": "persistent_task_messages",
+    "checkpoints": [
+      "SCOPE",
+      "ACK",
+      "HANDOFF",
+      "RECEIVED",
+      "INTEGRATED_OR_REPAIR_REQUIRED",
+      "PUBLISHED"
+    ],
+    "single_writer_per_file_scope": true,
+    "silence_is_acceptance": false,
+    "general_closes_cross_scope_work": true
+  },
   "local_deployment": {
     "dashboard_freshness_command": "python -B soldiers/thula/cli.py ensure-server --host 127.0.0.1 --port 8765",
     "success_states": [

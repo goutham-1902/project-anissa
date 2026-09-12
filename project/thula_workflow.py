@@ -13,7 +13,10 @@ def completed_task_credit(environment: ProjectEnvironment) -> tuple:
         environment,
         gateway=WorkbookGateway(environment=environment),
     )
-    return core.projection("thula-completed-task-credit").completed_task_credit
+    return core.projection(
+        "thula-completed-task-credit",
+        agenda_id=core.portfolio.default_agenda_id,
+    ).completed_task_credit
 
 
 def run_thula_sync(*, environment: ProjectEnvironment, **worker_args) -> dict:

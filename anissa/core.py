@@ -5,14 +5,18 @@ from datetime import date, datetime
 import json
 from typing import Callable
 
-from anissa.agendas.graduate_applications import GraduateApplicationsAgenda
+from anissa.agenda_catalog import AgendaCatalog, AgendaRuntime
 from anissa.portfolio import Portfolio
 from logic.discovery import discovery_context
 from logic.runtime import resolve_effective_mode
 from logic.telemetry import telemetry_context
 from logic.workbook_io import WorkbookGateway
 from project.environment import ProjectEnvironment
-from project.projections import AgendaProjection
+from project.projections import (
+    AgendaProjection,
+    AgendaSummaryProjection,
+    PortfolioProjection,
+)
 from project.reporting_week import resolve_closed_reporting_week
 from project.telemetry_contract import IST
 
@@ -37,13 +41,14 @@ class AnissaCore:
         today_provider: Callable[[], date] = date.today,
         telemetry_loader: Callable[..., dict] = telemetry_context,
         discovery_loader: Callable[..., dict] = discovery_context,
+        catalog: AgendaCatalog | None = None,
     ):
         self.environment = environment
-        self.portfolio = Portfolio.load(environment.portfolio_path)
-        if self.portfolio.default_agenda_id != GraduateApplicationsAgenda.agenda_id:
-            raise RuntimeError(
-                f"Unsupported default agenda: {self.portfolio.default_agenda_id}"
-            )
+        self.portfolio = (
+            catalog.portfolio
+            if catalog is not None
+            else Portfolio.load(environment.portfolio_path)
+        )
         role_payload = json.loads(
             environment.role_registry_path.read_text(encoding="utf-8")
         )
@@ -56,29 +61,84 @@ class AnissaCore:
         self._today = today_provider
         self._telemetry = telemetry_loader
         self._discovery = discovery_loader
-        self.agenda = GraduateApplicationsAgenda(
-            gateway or WorkbookGateway(environment=environment),
+        self.catalog = catalog or AgendaCatalog(
+            self.portfolio,
             environment,
+            gateway=gateway,
             today_provider=today_provider,
         )
 
-    def effective_gate(self, control: dict | None = None) -> dict:
+    @property
+    def agenda(self) -> AgendaRuntime:
+        """Temporary compatibility alias for the default agenda runtime."""
+
+        return self.open_agenda()
+
+    def open_agenda(
+        self,
+        agenda_id: str | None = None,
+        *,
+        for_mutation: bool = False,
+    ) -> AgendaRuntime:
+        return self.catalog.open(agenda_id, for_mutation=for_mutation)
+
+    def portfolio_projection(
+        self,
+        agenda_id: str | None = None,
+    ) -> PortfolioProjection:
+        """Project bounded portfolio metadata without opening any agenda runtime."""
+
+        selected = self.portfolio.registration(agenda_id)
+        summaries = tuple(
+            AgendaSummaryProjection(
+                agenda_id=row.agenda_id,
+                name=row.name,
+                lifecycle=row.lifecycle,
+                allocation_weight=row.allocation_weight,
+                selected=row.agenda_id == selected.agenda_id,
+            )
+            for row in self.portfolio.agendas
+        )
+        return PortfolioProjection(
+            default_agenda_id=self.portfolio.default_agenda_id,
+            selected_agenda_id=selected.agenda_id,
+            active_allocation_weight=sum(
+                row.allocation_weight
+                for row in self.portfolio.agendas
+                if row.lifecycle == "ACTIVE"
+            ),
+            agendas=summaries,
+        )
+
+    def effective_gate(
+        self,
+        control: dict | None = None,
+        *,
+        agenda_id: str | None = None,
+    ) -> dict:
+        agenda = self.open_agenda(agenda_id)
         settings = json.loads(
             self.environment.runtime_settings_path.read_text(encoding="utf-8")
         )
-        return resolve_effective_mode(settings, control or self.agenda.control())
+        return resolve_effective_mode(settings, control or agenda.control())
 
-    def projection(self, workflow: str) -> AgendaProjection:
-        control = self.agenda.control()
-        gate = self.effective_gate(control)
+    def projection(
+        self,
+        workflow: str,
+        agenda_id: str | None = None,
+    ) -> AgendaProjection:
+        agenda = self.open_agenda(agenda_id)
+        control = agenda.control()
+        gate = self.effective_gate(control, agenda_id=agenda.agenda_id)
         if not gate["ok"] or gate["effective_mode"] != "LIVE":
             raise RuntimeError("Anissa Core cannot project campaign state outside effective LIVE mode")
-        return self.agenda.projection(workflow, expected_control=control)
+        return agenda.projection(workflow, expected_control=control)
 
     def snapshot(
         self,
         workflow: str,
         *,
+        agenda_id: str | None = None,
         week_ending: date | None = None,
         as_of: datetime | None = None,
     ) -> dict:
@@ -96,8 +156,9 @@ class AnissaCore:
             if workflow == "weekly-audit"
             else None
         )
-        control = self.agenda.control()
-        gate = self.effective_gate(control)
+        agenda = self.open_agenda(agenda_id)
+        control = agenda.control()
+        gate = self.effective_gate(control, agenda_id=agenda.agenda_id)
         base = {
             "workflow": workflow,
             "date": self._today().isoformat(),
@@ -105,7 +166,7 @@ class AnissaCore:
         }
         if not gate["ok"] or gate["effective_mode"] != "LIVE":
             return {**base, "blocked": True}
-        projection = self.agenda.projection(
+        projection = agenda.projection(
             workflow,
             expected_control=control,
             audit_week=audit_week,
@@ -118,7 +179,7 @@ class AnissaCore:
         if workflow == "opportunity-discovery":
             result["discovery"] = self._discovery(
                 self.environment.worker("lucan").publication_root,
-                agenda_id=self.agenda.agenda_id,
+                agenda_id=agenda.agenda_id,
                 now=moment,
             )
         needs_telemetry = (

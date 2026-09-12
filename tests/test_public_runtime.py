@@ -36,6 +36,15 @@ class PublicRuntimeTests(unittest.TestCase):
         self.assertEqual(set(workbook.sheetnames), set(schema["sheets"]))
         workbook.close()
 
+    def test_portfolio_metadata_is_lazy_and_agenda_paths_are_explicit(self):
+        agenda_paths = self.environment.agenda("graduate_applications")
+        self.assertEqual(agenda_paths.brain_path, self.environment.brain_path)
+        self.assertEqual(agenda_paths.profile_root, self.environment.profile_root)
+        projection = AnissaCore(self.environment).portfolio_projection()
+        self.assertEqual(projection.default_agenda_id, "graduate_applications")
+        self.assertEqual(projection.selected_agenda_id, "graduate_applications")
+        self.assertEqual(len(projection.agendas), 1)
+
     def test_core_is_blocked_before_go_live_and_mutation_fails_closed(self):
         gateway = WorkbookGateway(environment=self.environment)
         before = sha256(self.environment.brain_path.read_bytes()).digest()
@@ -195,6 +204,9 @@ class PublicRuntimeTests(unittest.TestCase):
         self.assertTrue(route["accepted"])
         self.assertEqual(route["publisher"], "GENERAL")
         self.assertEqual(route["action"], "HANDOFF_VERIFIED_CHANGE_TO_GENERAL")
+        coordination = governance.policy["coordination"]
+        self.assertFalse(coordination["silence_is_acceptance"])
+        self.assertTrue(coordination["single_writer_per_file_scope"])
 
 
 if __name__ == "__main__":

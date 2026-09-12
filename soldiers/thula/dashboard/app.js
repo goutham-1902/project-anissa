@@ -6,10 +6,25 @@ const humanDate = value => value ? new Intl.DateTimeFormat("en-IN", {day:"numeri
 const humanDateTime = value => value ? new Intl.DateTimeFormat("en-IN", {dateStyle:"medium", timeStyle:"short", timeZone:"Asia/Kolkata"}).format(new Date(value)) : "Not yet available";
 const relativeDay = days => days == null ? "No date" : days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "Today" : days === 1 ? "Tomorrow" : `${days}d`;
 const state = {data:null, enabled:new Set(["Research", "Study", "Applications"]), selected:null};
-const palette = {Research:"#2393ff", Study:"#f2d325", Applications:"#111317"};
+const palette = {Research:"#111317", Study:"#f2d325", Applications:"#2393ff"};
 
 function observed(totals) {
   return Number(totals.total_minutes || 0) - Number(totals.applications_estimated_proxy_minutes || 0);
+}
+
+function monthlyDistribution(totals) {
+  const minutes = {
+    Research: Number(totals.research_minutes || 0),
+    Study: Number(totals.study_minutes || 0),
+    Applications: Number(totals.applications_minutes || 0),
+  };
+  const denominator = Object.values(minutes).reduce((total, value) => total + value, 0);
+  return {
+    minutes,
+    shares: Object.fromEntries(Object.entries(minutes).map(([category, value]) => [category, denominator ? value / denominator : 0])),
+    denominator_minutes: denominator,
+    basis: "Month-to-date Research/Study observed focus plus Applications completion credit",
+  };
 }
 
 function previousDate(value) {
@@ -128,7 +143,7 @@ function renderChart() {
 }
 
 function renderPie(distribution) {
-  const svg = document.querySelector("#weeklyPie");
+  const svg = document.querySelector("#monthlyPie");
   const total = Number(distribution.denominator_minutes || 0);
   const radius = 72, circumference = Math.PI * 2 * radius;
   let offset = 0;
@@ -140,8 +155,8 @@ function renderPie(distribution) {
       offset += share;
     }
   });
-  svg.innerHTML = `${rings}<text class="pie-total" x="110" y="106" text-anchor="middle">${esc(mins(total))}</text><text class="pie-caption" x="110" y="126" text-anchor="middle">THIS WEEK</text>`;
-  document.querySelector("#weekTotal").textContent = mins(total);
+  svg.innerHTML = `${rings}<text class="pie-total" x="110" y="106" text-anchor="middle">${esc(mins(total))}</text><text class="pie-caption" x="110" y="126" text-anchor="middle">THIS MONTH</text>`;
+  document.querySelector("#monthTotal").textContent = mins(total);
   document.querySelector("#pieLegend").innerHTML = ["Research","Study","Applications"].map(category => `<div><i class="${category.toLowerCase()}"></i><span>${category}</span><strong>${pct(distribution.shares[category])}</strong><small>${mins(distribution.minutes[category])}</small></div>`).join("");
   document.querySelector("#pieBasis").textContent = distribution.basis;
 }
@@ -247,7 +262,7 @@ async function load() {
     document.querySelector("#coverage").textContent = data.status.coverage_through ? `Last confirmed ${new Date(data.status.coverage_through).toLocaleString("en-IN", {dateStyle:"medium", timeStyle:"short"})}` : "No confirmed coverage timestamp";
     document.querySelector("#seriesRange").textContent = `${humanDate(data.series_coverage.start)} — ${humanDate(data.series_coverage.end)} · ${data.series_coverage.days} operational days · ${data.series_coverage.anchor}`;
     document.querySelector("#basisNote").innerHTML = `${data.status.usable_for_judgment ? "Current feed" : "Last confirmed history"} · Forest is observed focus; Applications is completion credit.${data.month.applications_estimated_proxy_minutes ? ` <span class="proxy-chip">${mins(data.month.applications_estimated_proxy_minutes)} proxy this month</span>` : ""}`;
-    renderKpis(data); renderChart(); renderPie(data.weekly_distribution);
+    renderKpis(data); renderChart(); renderPie(monthlyDistribution(data.month));
     renderVerdict(data.campaign.latest_weekly_audit);
     renderApplications(data.campaign.applications); renderTasks(data.campaign.weekly_plan);
     renderWeeklyHistory(data.weekly_history);
@@ -264,5 +279,5 @@ if (typeof document !== "undefined") {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = {historyCredit, telemetryCoverageState, weeklyHistoryMarkup};
+  module.exports = {historyCredit, monthlyDistribution, palette, telemetryCoverageState, weeklyHistoryMarkup};
 }

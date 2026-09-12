@@ -6,6 +6,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>__PYTHON__</string>
+    <string>-B</string>
     <string>__PROJECT__/soldiers/thula/cli.py</string>
     <string>serve</string>
     <string>--host</string><string>127.0.0.1</string>
@@ -14,6 +15,10 @@
   <key>WorkingDirectory</key><string>__PROJECT__</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>LowPriorityIO</key><true/>
+  <key>Nice</key><integer>5</integer>
+  <key>ThrottleInterval</key><integer>10</integer>
   <key>StandardOutPath</key><string>__INSTANCE__/soldiers/thula/private/dashboard.stdout.log</string>
   <key>StandardErrorPath</key><string>__INSTANCE__/soldiers/thula/private/dashboard.stderr.log</string>
 </dict>

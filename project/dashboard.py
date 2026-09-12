@@ -7,7 +7,7 @@ from pathlib import Path
 from anissa.core import AnissaCore
 from logic.workbook_io import WorkbookGateway
 from project.environment import ProjectEnvironment
-from project.projections import AgendaProjection
+from project.projections import GraduateApplicationsProjection, PortfolioProjection
 from project.reporting_week import ReportingWeek, previous_reporting_week, reporting_week_for
 from project.telemetry_contract import IST, operational_date, parse_moment, read_publication
 
@@ -180,7 +180,11 @@ def _week_coverage(status: dict, week: ReportingWeek) -> str:
     return "partial" if overlap else "pending"
 
 
-def _weekly_history(projection: AgendaProjection, rows: list[dict], status: dict) -> list[dict]:
+def _weekly_history(
+    projection: GraduateApplicationsProjection,
+    rows: list[dict],
+    status: dict,
+) -> list[dict]:
     audits = tuple(getattr(projection, "weekly_audits", ()))
     if not audits and projection.latest_audit:
         audits = (projection.latest_audit,)
@@ -224,7 +228,10 @@ def _weekly_history(projection: AgendaProjection, rows: list[dict], status: dict
     return history
 
 
-def _weekly_tasks(projection: AgendaProjection, today: date) -> list[dict]:
+def _weekly_tasks(
+    projection: GraduateApplicationsProjection,
+    today: date,
+) -> list[dict]:
     """Return the visible execution plan in scheduled order, not priority order."""
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
@@ -263,7 +270,10 @@ def _weekly_tasks(projection: AgendaProjection, today: date) -> list[dict]:
     return tasks
 
 
-def _campaign_snapshot(projection: AgendaProjection, today: date) -> dict:
+def _campaign_snapshot(
+    projection: GraduateApplicationsProjection,
+    today: date,
+) -> dict:
     applications = []
     for row in projection.applications:
         if row.status not in ACTIVE_APPLICATIONS:
@@ -325,8 +335,27 @@ def _campaign_snapshot(projection: AgendaProjection, today: date) -> dict:
     }
 
 
+def _portfolio_snapshot(projection: PortfolioProjection) -> dict:
+    return {
+        "default_agenda_id": projection.default_agenda_id,
+        "selected_agenda_id": projection.selected_agenda_id,
+        "active_allocation_weight": projection.active_allocation_weight,
+        "agendas": [
+            {
+                "agenda_id": row.agenda_id,
+                "name": row.name,
+                "lifecycle": row.lifecycle,
+                "allocation_weight": row.allocation_weight,
+                "selected": row.selected,
+            }
+            for row in projection.agendas
+        ],
+    }
+
+
 def dashboard_snapshot(*, worklog_path: Path, status_path: Path,
-                       agenda_projection: AgendaProjection,
+                       agenda_projection: GraduateApplicationsProjection,
+                       portfolio_projection: PortfolioProjection | None = None,
                        now: datetime | None = None) -> dict:
     now = (now or datetime.now(IST)).astimezone(IST)
     today = operational_date(now)
@@ -339,7 +368,7 @@ def dashboard_snapshot(*, worklog_path: Path, status_path: Path,
     previous_week = previous_reporting_week(calendar_today)
     series_start, series_end = _series_window(rows, today)
     week_totals = _totals(rows, reporting_week.start, min(today, reporting_week.end))
-    return {
+    snapshot = {
         "generated_at": now.isoformat(timespec="seconds"),
         "operational_date": today.isoformat(),
         "status": {**status, **_freshness(status, now)},
@@ -358,10 +387,14 @@ def dashboard_snapshot(*, worklog_path: Path, status_path: Path,
         "campaign": _campaign_snapshot(agenda_projection, calendar_today),
         "weekly_history": _weekly_history(agenda_projection, rows, status),
     }
+    if portfolio_projection is not None:
+        snapshot["portfolio"] = _portfolio_snapshot(portfolio_projection)
+    return snapshot
 
 
 def compose_dashboard(*, environment: ProjectEnvironment, worklog_path: Path,
-                      status_path: Path, now: datetime | None = None) -> dict:
+                      status_path: Path, agenda_id: str | None = None,
+                      now: datetime | None = None) -> dict:
     core = AnissaCore(
         environment,
         gateway=WorkbookGateway(environment=environment),
@@ -369,6 +402,7 @@ def compose_dashboard(*, environment: ProjectEnvironment, worklog_path: Path,
     return dashboard_snapshot(
         worklog_path=worklog_path,
         status_path=status_path,
-        agenda_projection=core.projection("dashboard"),
+        agenda_projection=core.projection("dashboard", agenda_id=agenda_id),
+        portfolio_projection=core.portfolio_projection(agenda_id),
         now=now,
     )

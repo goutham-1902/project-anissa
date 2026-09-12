@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 from datetime import date, datetime
 import json
 from pathlib import Path
@@ -37,12 +38,14 @@ def compact_snapshot(
     workflow: str,
     *,
     environment: ProjectEnvironment | None = None,
+    agenda_id: str | None = None,
     week_ending: date | None = None,
     as_of: datetime | None = None,
 ) -> dict:
     """Compatibility interface retained for role prompts and existing tests."""
     return _core(gateway, environment).snapshot(
         workflow,
+        agenda_id=agenda_id,
         week_ending=week_ending,
         as_of=as_of,
     )
@@ -58,12 +61,16 @@ def _iso_date(value: str) -> date:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="cmd", required=True)
-    commands.add_parser("status")
-    commands.add_parser("gate")
-    commands.add_parser("list-tasks")
+    campaign_commands = []
+    campaign_commands.append(commands.add_parser("status"))
+    campaign_commands.append(commands.add_parser("gate"))
+    campaign_commands.append(commands.add_parser("portfolio"))
+    campaign_commands.append(commands.add_parser("list-tasks"))
     detail = commands.add_parser("task-detail")
+    campaign_commands.append(detail)
     detail.add_argument("task_id")
     snapshot = commands.add_parser("snapshot")
+    campaign_commands.append(snapshot)
     snapshot.add_argument(
         "--workflow",
         default="status",
@@ -75,6 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     snapshot.add_argument("--week-ending", type=_iso_date)
     task_status = commands.add_parser("set-task-status")
+    campaign_commands.append(task_status)
     task_status.add_argument("task_id")
     task_status.add_argument("status")
     task_status.add_argument("--evidence", default="")
@@ -82,18 +90,23 @@ def build_parser() -> argparse.ArgumentParser:
     task_status.add_argument("--unblock-action", default="")
     task_status.add_argument("--actual-minutes", type=int)
     control = commands.add_parser("set-control")
+    campaign_commands.append(control)
     control.add_argument("key")
     control.add_argument("value")
     reminder = commands.add_parser("record-reminder")
+    campaign_commands.append(reminder)
     reminder.add_argument("task_ids", nargs="+")
     preview = commands.add_parser("preview-replan")
+    campaign_commands.append(preview)
     preview.add_argument("--event-json", required=True)
     preview.add_argument("--changes-json", default="[]")
     apply_command = commands.add_parser("apply-replan")
+    campaign_commands.append(apply_command)
     apply_command.add_argument("--event-json", required=True)
     apply_command.add_argument("--changes-json", default="[]")
     apply_command.add_argument("--confirm", required=True)
     audit = commands.add_parser("record-weekly-audit")
+    campaign_commands.append(audit)
     audit.add_argument("--week-ending", type=_iso_date, required=True)
     audit.add_argument("--strongest-achievement", default="")
     audit.add_argument("--failure-pattern", default="")
@@ -108,6 +121,13 @@ def build_parser() -> argparse.ArgumentParser:
         finish = commands.add_parser(name)
         finish.add_argument("dispatch_id")
         finish.add_argument("claim_token")
+    for command in campaign_commands:
+        command.add_argument(
+            "--agenda",
+            dest="agenda_id",
+            default=None,
+            help="registered agenda ID (defaults to the portfolio default)",
+        )
     return parser
 
 
@@ -132,11 +152,25 @@ def main(argv=None) -> int:
         return 0
     gateway = WorkbookGateway(environment=ENVIRONMENT)
     core = _core(gateway)
-    agenda = core.agenda
-    if args.cmd == "status":
+    agenda_id = args.agenda_id
+    mutating = args.cmd in {
+        "set-task-status",
+        "set-control",
+        "record-reminder",
+        "apply-replan",
+        "record-weekly-audit",
+    }
+    agenda = (
+        None
+        if args.cmd == "portfolio"
+        else core.open_agenda(agenda_id, for_mutation=mutating)
+    )
+    if args.cmd == "portfolio":
+        result = asdict(core.portfolio_projection(agenda_id))
+    elif args.cmd == "status":
         result = agenda.control()
     elif args.cmd == "gate":
-        result = core.effective_gate()
+        result = core.effective_gate(agenda_id=agenda_id)
     elif args.cmd == "list-tasks":
         result = agenda.list_tasks()
     elif args.cmd == "task-detail":
@@ -145,7 +179,11 @@ def main(argv=None) -> int:
             raise SystemExit(f"Unknown task: {args.task_id}")
     elif args.cmd == "snapshot":
         try:
-            result = core.snapshot(args.workflow, week_ending=args.week_ending)
+            result = core.snapshot(
+                args.workflow,
+                agenda_id=agenda_id,
+                week_ending=args.week_ending,
+            )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
     elif args.cmd == "set-task-status":
