@@ -74,7 +74,26 @@
     ],
     "single_writer_per_file_scope": true,
     "silence_is_acceptance": false,
-    "general_closes_cross_scope_work": true
+    "general_closes_cross_scope_work": true,
+    "anissa_role_update_notes": {
+      "owner": "GENERAL",
+      "required_before_closure": true,
+      "delivery_must_be_verified": true,
+      "targets": [
+        "COMMAND",
+        "WEEKDAY_OPS",
+        "WEEKEND"
+      ],
+      "content": [
+        "deployed_version",
+        "changed_behavior_or_interfaces",
+        "preserved_invariants",
+        "user_action_required"
+      ],
+      "implementation_only_updates_state_behavior_unchanged": true,
+      "request_acknowledgement": false,
+      "format": "compact_delta_only"
+    }
   },
   "local_deployment": {
     "dashboard_freshness_command": "python -B soldiers/thula/cli.py ensure-server --host 127.0.0.1 --port 8765",

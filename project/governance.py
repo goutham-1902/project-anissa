@@ -68,6 +68,34 @@ class Governance:
                 raise RuntimeError(f"Maintainer coordination must enable {field}")
         if coordination.get("silence_is_acceptance") is not False:
             raise RuntimeError("Maintainer silence cannot imply acceptance")
+        role_notes = coordination.get("anissa_role_update_notes", {})
+        if role_notes.get("owner") != "GENERAL":
+            raise RuntimeError("General must own Anissa role update notes")
+        if role_notes.get("targets") != [
+            "COMMAND",
+            "WEEKDAY_OPS",
+            "WEEKEND",
+        ]:
+            raise RuntimeError("Anissa role update-note targets are invalid")
+        required_content = {
+            "deployed_version",
+            "changed_behavior_or_interfaces",
+            "preserved_invariants",
+            "user_action_required",
+        }
+        if set(role_notes.get("content") or ()) != required_content:
+            raise RuntimeError("Anissa role update-note content is invalid")
+        for field in (
+            "required_before_closure",
+            "delivery_must_be_verified",
+            "implementation_only_updates_state_behavior_unchanged",
+        ):
+            if role_notes.get(field) is not True:
+                raise RuntimeError(f"Anissa role update notes must enable {field}")
+        if role_notes.get("request_acknowledgement") is not False:
+            raise RuntimeError("Anissa role update notes cannot request acknowledgement")
+        if role_notes.get("format") != "compact_delta_only":
+            raise RuntimeError("Anissa role update notes must be compact and delta-only")
 
     def ledger_path(self, maintainer_id: str) -> Path:
         self._require_maintainer(maintainer_id)
