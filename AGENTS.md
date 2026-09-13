@@ -47,26 +47,11 @@ projections, cannot import the workbook gateway or agenda implementation, and
 cannot mutate campaign state. Missing or stale telemetry is not evidence of
 inactivity and never becomes a false zero.
 
-A worker configured as `SETUP` or `SHADOW` must not run autonomously, bind an
-automation or publish a live result. A private instance may bind one persistent
-`Lucan` task for an explicitly assigned manual shadow brief; it returns raw JSON
-to Argal for validation and cannot write the publication slot. Discovery
-candidates remain evidence inputs, not campaign decisions. The execution
-adapter may render a supplied brief and validate a returned result; browsing
-remains in the persistent Lucan task. SHADOW validation cannot write the
-publication slot. When separately activated by coherent private settings,
-durable results must use the shared discovery-publication module. Anissa
-consumes only its bounded discovery context, independently applies campaign
-policy, and ignores
-SHADOW, missing, corrupt or expired data. A failed refresh must never become a
-false zero.
-
 ## Efficiency
 
 Use code for IDs, deduplication, dates, arithmetic, state transitions and compact
 projections. Load only the policy and private-instance evidence required for the
-current workflow. Load Lucan output only during explicit discovery evaluation,
-not routine allocation, reminder, close or audit workflows.
+current workflow.
 
 ## Maintainer publication
 

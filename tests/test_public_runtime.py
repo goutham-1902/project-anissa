@@ -7,19 +7,14 @@ import unittest
 from openpyxl import load_workbook
 
 from anissa.core import AnissaCore
-from logic.discovery import discovery_context
 from logic.workbook_io import WorkbookGateway
 from project.environment import RELEASE_ROOT, resolve_environment
 from project.dispatch import DispatchGate
-from project.discovery_brief import validate_discovery_brief
-from project.discovery_contract import DiscoveryContractError, validate_discovery_publication
 from project.governance import Governance
 from project.telemetry_contract import read_publication
 from soldiers.thula import cli as thula_cli
 from soldiers.thula.src import accounting as thula_accounting
 from soldiers.thula.src.dashboard_server import dashboard_build_id, dashboard_health
-from soldiers.lucan import cli as lucan_cli
-from soldiers.lucan.prompt_adapter import build_prompt
 
 
 class PublicRuntimeTests(unittest.TestCase):
@@ -85,81 +80,11 @@ class PublicRuntimeTests(unittest.TestCase):
         self.assertNotIn("WorkbookGateway", text)
         self.assertNotIn("anissa.agendas", text)
 
-    def test_worker_interfaces_include_live_capability_and_shadow_discovery(self):
+    def test_worker_interface_includes_live_telemetry_capability(self):
         self.assertTrue(callable(thula_cli.build_parser))
         self.assertTrue(callable(thula_cli.main))
         self.assertTrue(callable(thula_accounting.build_worklog))
-        lucan = self.environment.worker("lucan")
-        settings = json.loads(lucan.settings_path.read_text(encoding="utf-8"))
-        self.assertEqual(settings["mode"], "SETUP")
-        self.assertEqual(settings["publication"]["state"], "SHADOW")
-        self.assertIsNone(settings["thread_id"])
-        self.assertIsNone(settings["automation_id"])
-        context = discovery_context(
-            lucan.publication_root,
-            agenda_id="graduate_applications",
-        )
-        self.assertEqual(context["availability"], "unavailable")
-        self.assertEqual(context["data_policy"], "ignore")
-
-        root_contract = (RELEASE_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        readme = (RELEASE_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("one persistent\n`Lucan` task", root_contract)
-        self.assertIn("persistent `Lucan` task", readme)
-        self.assertIn("cannot write the publication slot", root_contract)
         self.assertFalse((RELEASE_ROOT / "worker1").exists())
-
-    def test_lucan_publication_cannot_smuggle_campaign_decisions(self):
-        payload = {
-            "schema_version": 1,
-            "worker_id": "lucan",
-            "agenda_id": "graduate_applications",
-            "assignment_id": "public-test",
-            "run_kind": "SCHEDULED_SWEEP",
-            "status": "COMPLETE",
-            "started_at": "2026-09-06T10:00:00+05:30",
-            "completed_at": "2026-09-06T10:01:00+05:30",
-            "candidates": [],
-            "source_failures": [],
-            "recommendation": "Apply",
-        }
-        with self.assertRaisesRegex(DiscoveryContractError, "unexpected recommendation"):
-            validate_discovery_publication(payload)
-
-    def test_lucan_shadow_adapter_is_offline_and_bounded(self):
-        brief = {
-            "schema_version": 2,
-            "worker_id": "lucan",
-            "agenda_id": "synthetic_campaign",
-            "assignment_id": "public_shadow_test",
-            "run_kind": "SCHEDULED_SWEEP",
-            "created_at": "2026-09-06T18:00:00+05:30",
-            "search_since": None,
-            "objective": "Find new funded scientific research opportunities.",
-            "max_candidates": 4,
-            "domestic_eligibility_countries": ["Exampleland"],
-            "profile_facts": ["Applicant has a relevant bachelor's degree."],
-            "hard_rules": ["Do not infer missing funding or eligibility."],
-            "tracks": [{
-                "track_id": "RESEARCH_DEGREES",
-                "allocation": 1.0,
-                "objective": "Find funded research degrees.",
-                "directives": ["Prefer primary institutional sources."],
-                "source_priorities": ["Official programme pages"],
-            }],
-            "known_candidates": [],
-        }
-        validated = validate_discovery_brief(brief)
-        settings = json.loads(
-            self.environment.worker("lucan").settings_path.read_text(encoding="utf-8")
-        )
-        package = build_prompt(brief, settings)
-        self.assertEqual(validated.assignment_id, package.assignment_id)
-        self.assertLess(package.approximate_input_tokens, 4500)
-        self.assertTrue(callable(lucan_cli.build_parser))
-        self.assertTrue(callable(lucan_cli.main))
-        self.assertEqual(settings["cadence"]["binding_state"], "PROPOSED")
-        self.assertIsNone(settings["automation_id"])
 
     def test_dashboard_includes_bounded_weekly_history_without_private_assets(self):
         dashboard = RELEASE_ROOT / "soldiers" / "thula" / "dashboard"

@@ -14,7 +14,7 @@
   "SOLDIERS_MAINTAINER": {
     "name": "General Kreg",
     "ledger": "soldiers_maintainer.json",
-    "responsibility": "Thula, Lucan and future capability-scoped workers",
+    "responsibility": "Thula and future capability-scoped workers",
     "publication_duty": "Route verified public-safe fixes to Argal; keep worker private state and private-instance changes local"
   }
 }

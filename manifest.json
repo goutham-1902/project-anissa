@@ -1,6 +1,6 @@
 {
   "name": "Project Anissa",
-  "version": "2.75.0",
+  "version": "2.75.1",
   "interface": "chat",
   "default_mode": "SETUP",
   "private_instance_required": true,

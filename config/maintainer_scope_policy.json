@@ -56,9 +56,7 @@
       "shared/",
       "soldiers/thula/private/",
       "soldiers/thula/tests/",
-      "soldiers/thula/dashboard/assets/",
-      "soldiers/lucan/private/",
-      "soldiers/lucan/tests/"
+      "soldiers/thula/dashboard/assets/"
     ],
     "rule": "Every maintainer must route verified public-safe fixes into the public release. Atomic maintainers hand off publication to General; General alone generates, audits and pushes the allowlisted public projection. Private-instance and private-persona changes remain local."
   },

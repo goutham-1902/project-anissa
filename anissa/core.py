@@ -7,7 +7,6 @@ from typing import Callable
 
 from anissa.agenda_catalog import AgendaCatalog, AgendaRuntime
 from anissa.portfolio import Portfolio
-from logic.discovery import discovery_context
 from logic.runtime import resolve_effective_mode
 from logic.telemetry import telemetry_context
 from logic.workbook_io import WorkbookGateway
@@ -40,7 +39,6 @@ class AnissaCore:
         gateway: WorkbookGateway | None = None,
         today_provider: Callable[[], date] = date.today,
         telemetry_loader: Callable[..., dict] = telemetry_context,
-        discovery_loader: Callable[..., dict] = discovery_context,
         catalog: AgendaCatalog | None = None,
     ):
         self.environment = environment
@@ -60,7 +58,6 @@ class AnissaCore:
         )
         self._today = today_provider
         self._telemetry = telemetry_loader
-        self._discovery = discovery_loader
         self.catalog = catalog or AgendaCatalog(
             self.portfolio,
             environment,
@@ -176,16 +173,8 @@ class AnissaCore:
             "mode": gate["effective_mode"],
             **projection.compatibility_payload(),
         }
-        if workflow == "opportunity-discovery":
-            result["discovery"] = self._discovery(
-                self.environment.worker("lucan").publication_root,
-                agenda_id=agenda.agenda_id,
-                now=moment,
-            )
         needs_telemetry = (
-            workflow not in {
-                "weekday-reminder", "weekend-reminder", "opportunity-discovery"
-            }
+            workflow not in {"weekday-reminder", "weekend-reminder"}
             or bool(result.get("reminder_due"))
         )
         if needs_telemetry:

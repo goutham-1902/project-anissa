@@ -9,7 +9,6 @@ from pathlib import Path
 from openpyxl import Workbook
 
 from project.environment import ProjectEnvironment
-from project.discovery_publication import empty_discovery_status
 from project.telemetry_contract import FIELDS
 
 
@@ -100,12 +99,6 @@ def _empty_telemetry(environment: ProjectEnvironment) -> None:
     })
 
 
-def _empty_discovery_publication(environment: ProjectEnvironment) -> None:
-    lucan = environment.worker("lucan")
-    lucan.publication_root.mkdir(parents=True, exist_ok=True)
-    _json(lucan.publication_root / "status.json", empty_discovery_status())
-
-
 def initialize_instance(
     release_root: Path,
     instance_root: Path,
@@ -150,15 +143,6 @@ def initialize_instance(
         "acquisition": {"type": "manual_csv_import", "timezone": "Asia/Kolkata"},
         "dashboard": {"host": "127.0.0.1", "port": 8765},
     })
-    lucan = environment.worker("lucan")
-    _json(
-        lucan.settings_path,
-        json.loads(
-            (release / "soldiers" / "lucan" / "settings.default.json").read_text(
-                encoding="utf-8"
-            )
-        ),
-    )
     _json(environment.profile_root / "verified_profile.json", {
         "schema_version": 1,
         "status": "UNCONFIGURED",
@@ -171,7 +155,6 @@ def initialize_instance(
     })
     environment.private_persona_root.mkdir(parents=True, exist_ok=True)
     thula.private_root.mkdir(parents=True, exist_ok=True)
-    lucan.private_root.mkdir(parents=True, exist_ok=True)
     environment.private_assets_root.mkdir(parents=True, exist_ok=True)
     environment.maintainer_ledgers_root.mkdir(parents=True, exist_ok=True)
     environment.lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -184,7 +167,6 @@ def initialize_instance(
         "slots": {},
     })
     _empty_telemetry(environment)
-    _empty_discovery_publication(environment)
     _json(root / "instance.json", {
         "schema_version": 1,
         "release_version": version,

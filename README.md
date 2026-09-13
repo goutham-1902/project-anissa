@@ -34,24 +34,9 @@ eligibility, funding, deadlines, evidence, ranking, calculations or task state.
 The included clean persona is a reusable default; create personal extensions in
 the external instance and never commit that instance.
 
-The clean release includes two worker interfaces: Thula for deterministic focus
-telemetry and Lucan for bounded opportunity discovery. Lucan ships in shadow
-mode with no task binding or automation. A private instance may bind one
-persistent `Lucan` task for explicitly assigned manual shadow trials; its raw
-result is validated locally and never mutates an agenda directly. The execution
-adapter prepares compact typed prompts with a hard web-call budget and per-run
-source rotation, validates returned results and permits
-publication only when private mode, automation and publication settings form a
-coherent LIVE gate. Browsing remains in the persistent task. A shared
-publication module provides checksum-coherent atomic handoff,
-conflicting-replay protection and last-known-good retention. Anissa loads its
-bounded output only through an explicit opportunity-discovery snapshot; routine
-operations do not carry discovery context.
-
-Reusable settings propose Monday and Thursday 06:30 delta sweeps in
-Asia/Kolkata, with quiet no-change success and compact candidate/failure
-reporting. This is inactive metadata: each installation must explicitly approve
-and bind its own schedule.
+The clean release includes Thula as a deterministic focus-telemetry worker.
+Her typed publication can inform workload context but cannot mutate an agenda,
+prove task completion or become a false zero when data is missing.
 
 ## Install and verify
 
