@@ -48,6 +48,9 @@ python3 -m venv .venv
 
 The verifier creates a temporary synthetic SETUP instance. It does not activate
 automations, submit applications or create chats.
+Portable regression tests and the verifier are shared with the local source.
+Passing software tests does not authorize a worker or establish live workflow
+acceptance; scheduling additionally requires compatible LIVE settings.
 
 ## Create a local instance
 

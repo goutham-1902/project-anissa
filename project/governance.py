@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import re
+import subprocess
 
 from logic.locks import exclusive_lock
 from project.environment import ProjectEnvironment
@@ -12,6 +14,82 @@ from project.environment import ProjectEnvironment
 
 MAINTAINER_IDS = ("GENERAL", "ANISSA_MAINTAINER", "SOLDIERS_MAINTAINER")
 COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+
+
+def verification_identity(root: Path) -> dict:
+    """Identify the actual tested source, including uncommitted source edits."""
+    root = Path(root).resolve()
+    ignored = {".git", "__pycache__", "node_modules", "brain", "profile", "runtime", "shared", "work", "tmp", "private"}
+    suffixes = {".py", ".json", ".md", ".css", ".js", ".html", ".toml", ".yml", ".yaml", ".txt"}
+    digest = sha256()
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root)
+        if not path.is_file() or set(relative.parts) & ignored or path.suffix not in suffixes:
+            continue
+        digest.update(relative.as_posix().encode() + b"\0" + path.read_bytes() + b"\0")
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True,
+    )
+    return {
+        "version": _read_json(root / "manifest.json")["version"],
+        "source_revision": revision.stdout.strip() if revision.returncode == 0 else None,
+        "source_digest": digest.hexdigest(),
+    }
+
+
+def automation_contract_problems(settings: dict, automations: dict, workers: tuple = ()) -> list[str]:
+    """Reject scheduled work whose declared mode or task binding disallows it."""
+    problems = []
+    for role, identifier in (settings.get("automation_bindings") or {}).items():
+        task = automations.get(identifier, {})
+        if task.get("status") != "ACTIVE":
+            problems.append(f"bound automation is not active: {identifier}")
+        if settings.get("mode") != "LIVE" or settings.get("go_live_authorized") is not True:
+            problems.append(f"scheduled campaign work requires authorized LIVE mode: {identifier}")
+        role_id = role.removesuffix("_DISPATCHER")
+        expected = (settings.get("chat_bindings") or {}).get(role_id)
+        if not expected or task.get("target_thread_id") != expected:
+            problems.append(f"automation task binding disagrees: {identifier}")
+    for worker in workers:
+        identifier = worker.get("automation_id")
+        task = automations.get(identifier, {})
+        if task.get("status") != "ACTIVE":
+            if worker.get("automation_status") == "ACTIVE":
+                problems.append(f"worker automation is not active: {identifier}")
+            continue
+        if worker.get("mode") != "LIVE":
+            problems.append(f"scheduled worker requires LIVE mode: {identifier}")
+        if worker.get("automation_status") != "ACTIVE":
+            problems.append(f"worker automation status disagrees: {identifier}")
+        if not worker.get("thread_id") or task.get("target_thread_id") != worker.get("thread_id"):
+            problems.append(f"worker automation task binding disagrees: {identifier}")
+        if worker.get("project_version") != settings.get("package_version"):
+            problems.append(f"scheduled worker release version disagrees: {identifier}")
+    project_path = (settings.get("project_binding") or {}).get("path")
+    targets = set((settings.get("chat_bindings") or {}).values())
+    targets.update((settings.get("maintainer_chat_bindings") or {}).values())
+    targets.update(worker.get("thread_id") for worker in workers if worker.get("thread_id"))
+    for identifier, task in automations.items():
+        if (project_path and project_path in task.get("prompt", "")
+                and task.get("status") == "ACTIVE" and task.get("target_thread_id") not in targets):
+            problems.append(f"unregistered scheduled project task: {identifier}")
+    return problems
+
+
+def validate_release_evidence(record: dict, identity: dict, *, implementation_only: bool,
+                              operational_evidence: dict | None = None) -> dict:
+    """Software tests cannot substitute for acceptance of changed workflows."""
+    if (record.get("status") != "PASSED" or not record.get("checks")
+            or any(check.get("status") != "PASSED" for check in record["checks"])
+            or any(record.get(key) != value for key, value in identity.items())):
+        raise ValueError("Release source differs from the passing verification record")
+    if implementation_only:
+        return {"status": "UNCHANGED_RUNTIME", "evidence": "Implementation-only release"}
+    evidence = operational_evidence or {}
+    if (evidence.get("status") != "PASSED" or not evidence.get("evidence")
+            or evidence.get("source_revision") != identity.get("source_revision")):
+        raise ValueError("Changed runtime behavior requires revision-matched operational acceptance")
+    return evidence
 
 
 def _read_json(path: Path) -> dict:

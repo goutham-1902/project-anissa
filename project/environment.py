@@ -88,6 +88,10 @@ class ProjectEnvironment:
                 return paths
         raise KeyError(f"unknown Project Anissa worker: {worker_id!r}")
 
+    @property
+    def worker_ids(self) -> tuple[str, ...]:
+        return tuple(paths.worker_id for paths in self._worker_paths)
+
     @classmethod
     def existing_layout(cls, release_root: Path = RELEASE_ROOT) -> "ProjectEnvironment":
         root = Path(release_root).resolve()

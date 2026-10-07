@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 from pathlib import Path
-import json, os, sys, tempfile, zipfile
+import argparse, json, os, sys, tempfile, tomllib, zipfile
 from openpyxl import load_workbook
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from project.environment import resolve_environment
+from project.governance import automation_contract_problems
 ENVIRONMENT=resolve_environment(ROOT)
 BRAIN=ENVIRONMENT.brain_path
 SCHEMA=json.loads(ENVIRONMENT.schema_path.read_text())
 
 def main():
+    parser=argparse.ArgumentParser(description='Validate the deployment without activating it')
+    parser.add_argument('--automations-root',type=Path,default=Path.home()/'.codex'/'automations')
+    args=parser.parse_args()
     problems=[]
     if not BRAIN.exists(): problems.append('brain workbook missing')
     elif not zipfile.is_zipfile(BRAIN): problems.append('brain workbook is not a valid xlsx zip container')
@@ -30,6 +34,9 @@ def main():
     for label,path in required.items():
         if not path.exists(): problems.append(f'missing {label}: {path}')
     settings=json.loads(ENVIRONMENT.runtime_settings_path.read_text())
+    release=json.loads((ROOT/'manifest.json').read_text())
+    if settings.get('package_version') != release.get('version'):
+        problems.append('runtime package_version does not match checked-out release')
     mode=settings.get('mode')
     authorized=settings.get('go_live_authorized')
     if mode not in {'SETUP','LIVE'}: problems.append(f'unsupported runtime mode: {mode!r}')
@@ -60,12 +67,14 @@ def main():
             os.close(fd); Path(probe).unlink(missing_ok=True)
         except OSError as exc:
             problems.append(f'not writable: {folder} ({exc})')
-    automations=Path.home()/'.codex'/'automations'
+    automations=args.automations_root
+    records={}
     active_anissa=[]
     if automations.exists():
         for path in automations.glob('*/automation.toml'):
-            text=path.read_text(encoding='utf-8',errors='ignore')
-            if 'anissa' in text.lower() and 'status = "ACTIVE"' in text:
+            record=tomllib.loads(path.read_text(encoding='utf-8'))
+            records[path.parent.name]=record
+            if 'anissa' in str(record).lower() and record.get('status') == 'ACTIVE':
                 active_anissa.append(path.parent.name)
     bindings=settings.get('automation_bindings') or {}
     if mode == 'SETUP':
@@ -73,9 +82,9 @@ def main():
         if active_anissa: problems.append(f'Anissa automations active during SETUP: {active_anissa}')
     elif mode == 'LIVE':
         if not bindings: problems.append('LIVE mode requires automation bindings')
-        expected={str(v) for v in bindings.values() if v}
-        missing=sorted(expected-set(active_anissa))
-        if missing: problems.append(f'bound Anissa automations are not active: {missing}')
+    workers=tuple(json.loads(ENVIRONMENT.worker(identifier).settings_path.read_text())
+                  for identifier in ENVIRONMENT.worker_ids)
+    problems.extend(automation_contract_problems(settings,records,workers))
     if problems:
         print('PREFLIGHT FAILED')
         for x in problems: print('-',x)

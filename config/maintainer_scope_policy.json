@@ -47,6 +47,7 @@
     "publisher": "GENERAL",
     "projection_builder": "tools/build_public_release.py",
     "safety_gate": "tools/public_safety.py",
+    "closure_gate": "private_tools/check_release.py",
     "eligibility": "ALLOWLIST_AND_SAFETY_GATE",
     "excluded_state_roots": [
       "brain/",
