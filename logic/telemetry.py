@@ -161,11 +161,20 @@ def telemetry_context(
     shared_root: Path = SHARED_ROOT,
     now: datetime | None = None,
     reporting_week: ReportingWeek | None = None,
+    reporting_period: tuple[date, date] | None = None,
 ) -> dict:
     """Return the only compact Thula context Anissa is allowed to consume."""
     now = (now or datetime.now(IST)).astimezone(IST)
     if reporting_week is not None and workflow != "weekly-audit":
         raise ValueError("A reporting-week override is valid only for weekly audits.")
+    if reporting_period is not None:
+        start, end = reporting_period
+        if (
+            not isinstance(start, date) or isinstance(start, datetime)
+            or not isinstance(end, date) or isinstance(end, datetime)
+            or start > end or (end - start).days >= 56
+        ):
+            raise ValueError("A recovery reporting period must span 1-56 calendar days.")
     loaded = _read_contract(Path(shared_root), now)
     if isinstance(loaded, dict):
         return loaded
@@ -235,6 +244,19 @@ def telemetry_context(
             "coverage": coverage_state,
         }
         if coverage_state != "complete":
+            result["data_policy"] = "positive_only"
+            result["guardrail"] = "positive_only"
+    if reporting_period is not None:
+        start, end = reporting_period
+        coverage = _parse_moment(base["coverage_through"])
+        period_end = datetime.combine(end, BOUNDARY, tzinfo=IST)
+        covered_through_end = coverage >= period_end
+        result["recovery_period"] = {
+            **_compact_period(_period(rows, start, end), detailed=True),
+            "coverage": "through_end" if covered_through_end else "partial",
+            "positive_evidence_only": True,
+        }
+        if not covered_through_end:
             result["data_policy"] = "positive_only"
             result["guardrail"] = "positive_only"
     return result

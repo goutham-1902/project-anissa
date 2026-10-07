@@ -38,6 +38,14 @@ The clean release includes Thula as a deterministic focus-telemetry worker.
 Her typed publication can inform workload context but cannot mutate an agenda,
 prove task completion or become a false zero when data is missing.
 
+Missed local runs are coalesced on the next existing scheduled wake or actual
+role interaction. The shared recovery module selects current allocations or the
+latest closed-week audit, not a backlog of expired notifications. Technical
+receipts distinguish durable work from report delivery; delivery retries never
+repeat campaign mutations. Thula backfills from one newest full-history export.
+App reconnection alone is not a guaranteed wake trigger, and no extra polling
+schedule is required.
+
 ## Install and verify
 
 ```bash

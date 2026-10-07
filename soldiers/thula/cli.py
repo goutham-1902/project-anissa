@@ -41,6 +41,27 @@ def _paths(args) -> dict:
     }
 
 
+def _recovery_plan(*, environment=ENVIRONMENT, now: datetime | None = None) -> dict:
+    settings = json.loads(
+        environment.worker("thula").settings_path.read_text(encoding="utf-8")
+    )
+    if not isinstance(settings, dict) or (
+        settings.get("mode") != "LIVE"
+        or settings.get("automation_status") != "ACTIVE"
+    ):
+        raise RuntimeError("Thula recovery requires LIVE mode and ACTIVE automation")
+
+    from project.dispatch import DispatchGate
+    from project.recovery import plan_recovery
+    from project.telemetry_contract import IST
+
+    return plan_recovery(
+        "THULA",
+        now=now or datetime.now(IST),
+        receipts=DispatchGate(environment).state(),
+    )
+
+
 def _health(host: str, port: int, timeout: float = 2.0) -> dict | None:
     try:
         with urlopen(f"http://{host}:{port}/health", timeout=timeout) as response:
@@ -115,6 +136,7 @@ def build_parser() -> argparse.ArgumentParser:
     stale.add_argument("--stage", required=True)
     stale.add_argument("--message", required=True)
 
+    sub.add_parser("recovery-plan", help="Plan only the latest due Thula check")
     sub.add_parser("snapshot", help="Print the compact dashboard snapshot")
 
     serve = sub.add_parser("serve", help="Run the Mac-local dashboard")
@@ -140,6 +162,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     paths = _paths(args)
+    if args.command == "recovery-plan":
+        print(json.dumps(_recovery_plan(), ensure_ascii=False, separators=(",", ":")))
+        return 0
     if args.command == "sync":
         from project.thula_workflow import run_thula_sync
         from soldiers.thula.src.sync import load_payload

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import date, datetime, timedelta
+from math import isfinite
 from typing import Callable
 
 from logic.ids import weekly_audit_id
@@ -22,6 +24,7 @@ from project.reporting_week import (
     reporting_week_for,
     resolve_closed_reporting_week,
 )
+from project.telemetry_contract import IST
 
 
 AGENDA_ID = "graduate_applications"
@@ -29,6 +32,8 @@ OPEN_TASKS = {"Not Started", "Started", "Blocked"}
 ACTIVE_APPLICATIONS = {"Researching", "Preparing", "Applying", "Submitted", "Interview", "Offer"}
 PRIORITY = {"Urgent": 0, "High": 1, "Medium": 2, "Low": 3}
 WEEKLY_AUDIT_HISTORY_LIMIT = 7
+RECOVERY_HISTORY_DAYS = 56
+RECOVERY_ROW_LIMIT = 6
 
 
 def _optional_float(value: object) -> float | None:
@@ -114,6 +119,81 @@ def _weekly_audit_projection(row: dict) -> WeeklyAuditRecordProjection:
     )
 
 
+def _recovery_moment(value: datetime) -> datetime:
+    return value.replace(tzinfo=IST) if value.tzinfo is None else value.astimezone(IST)
+
+
+def _recovery_completion(row: dict) -> dict | None:
+    """Use recorded completion time and evidence, never a current status as history."""
+
+    if (
+        str(row.get("Status") or "") != "Done"
+        or not str(row.get("Task ID") or "").strip()
+        or not str(row.get("Evidence") or "").strip()
+    ):
+        return None
+    try:
+        completed = _datetime_value(row.get("Completed At"))
+    except ValueError:
+        return None
+    if completed is None:
+        return None
+    try:
+        actual = _optional_float(row.get("Actual Minutes"))
+        estimated = _optional_float(row.get("Estimated Minutes"))
+    except (TypeError, ValueError):
+        actual = estimated = None
+    actual = actual if actual is not None and isfinite(actual) and actual >= 0 else None
+    estimated = (
+        estimated if estimated is not None and isfinite(estimated) and estimated >= 0
+        else None
+    )
+    basis = "actual" if actual is not None else "estimated_proxy" if estimated is not None else "unavailable"
+    minutes = actual if actual is not None else estimated if estimated is not None else 0.0
+    return {
+        "task_id": str(row.get("Task ID") or ""),
+        "title": _clip(row.get("Task Title"), 120),
+        "completed_at": _recovery_moment(completed),
+        "evidence": _clip(row.get("Evidence"), 160),
+        "minutes": round(minutes, 2),
+        "basis": basis,
+    }
+
+
+def _recovery_credit(rows: list[dict], start: datetime, end: datetime) -> dict:
+    matching = sorted(
+        (row for row in rows if start < row["completed_at"] <= end),
+        key=lambda row: (row["completed_at"], row["task_id"]),
+        reverse=True,
+    )
+    return {
+        "completion_count": len(matching),
+        "actual_minutes": round(sum(
+            row["minutes"] for row in matching if row["basis"] == "actual"
+        ), 2),
+        "estimated_proxy_minutes": round(sum(
+            row["minutes"] for row in matching if row["basis"] == "estimated_proxy"
+        ), 2),
+        "completions": [{
+            **row,
+            "completed_at": row["completed_at"].isoformat(),
+        } for row in matching[:RECOVERY_ROW_LIMIT]],
+        "completions_truncated": len(matching) > RECOVERY_ROW_LIMIT,
+    }
+
+
+def _recovery_open_task(row: dict) -> dict:
+    return {
+        "task_id": str(row.get("Task ID") or ""),
+        "title": _clip(row.get("Task Title"), 120),
+        "status": str(row.get("Status") or ""),
+        "due": _iso(row.get("Due Date")),
+        "priority": str(row.get("Priority") or ""),
+        "owner_chat": str(row.get("Owner Chat") or ""),
+        "exact_next_action": _clip(row.get("Definition of Done"), 180),
+    }
+
+
 class GraduateApplicationsAgenda:
     """Own graduate-application workbook vocabulary behind one agenda interface."""
 
@@ -134,6 +214,169 @@ class GraduateApplicationsAgenda:
 
     def control(self) -> dict:
         return self.gateway.read_control()
+
+    def recovery_state(
+        self,
+        role: str,
+        *,
+        as_of: datetime,
+        since: datetime | None = None,
+        week_ending: date | None = None,
+    ) -> dict:
+        """Read one workbook generation for bounded recovery evidence."""
+
+        moment = _recovery_moment(as_of)
+        delivered = _recovery_moment(since) if since is not None else None
+        target = resolve_closed_reporting_week(week_ending, as_of=moment)
+        state = self.gateway.read_bundle(
+            "CONTROL", "TASKS", "APPLICATIONS", "WORKLOAD_EVENTS", "WEEKLY_AUDITS"
+        )
+        tasks = state["TASKS"]
+        today = moment.date()
+        audit_ends = {
+            end for row in state["WEEKLY_AUDITS"]
+            if (end := date_value(row.get("Week End"))) is not None and end <= target.end
+        }
+        latest_audit_end = max(audit_ends, default=None)
+        recorded_row = next((
+            row for row in state["WEEKLY_AUDITS"]
+            if date_value(row.get("Week End")) == target.end
+        ), None)
+        audit_recorded = recorded_row is not None
+        completed = [
+            item for row in tasks if (item := _recovery_completion(row)) is not None
+        ]
+        open_rows = sorted(
+            (row for row in tasks if row.get("Status") in OPEN_TASKS),
+            key=_task_sort,
+        )
+        blockers = [row for row in open_rows if row.get("Status") == "Blocked"]
+        overdue = [
+            row for row in open_rows
+            if (due := date_value(row.get("Due Date"))) is not None and due < today
+        ]
+        deadlines = sorted((
+            row for row in state["APPLICATIONS"]
+            if str(row.get("Status") or "") in ACTIVE_APPLICATIONS
+            and (deadline := date_value(row.get("Deadline"))) is not None
+            and deadline >= today
+        ), key=lambda row: (
+            date_value(row.get("Deadline")) or date.max,
+            str(row.get("Application ID") or ""),
+        ))
+        current = {
+            "as_of": moment.isoformat(),
+            "blockers": [{
+                "task_id": row.get("Task ID"),
+                "title": _clip(row.get("Task Title"), 120),
+                "blocker": _clip(row.get("Blocker"), 140),
+                "unblock_action": _clip(row.get("Unblock Action"), 140),
+            } for row in blockers[:RECOVERY_ROW_LIMIT]],
+            "blocker_count": len(blockers),
+            "overdue": [
+                _recovery_open_task(row) for row in overdue[:RECOVERY_ROW_LIMIT]
+            ],
+            "overdue_count": len(overdue),
+            "deadlines": [{
+                "application_id": row.get("Application ID"),
+                "programme": _clip(row.get("Programme / Position"), 120),
+                "deadline": _iso(row.get("Deadline")),
+                "next_action": _clip(row.get("Next Action"), 160),
+            } for row in deadlines[:RECOVERY_ROW_LIMIT]],
+            "deadline_count": len(deadlines),
+        }
+        weekday_reminder = self._snapshot(
+            "weekday-reminder", state=state, today=today
+        )["reminder_due"] if today.weekday() < 5 else False
+        weekend_reminder = self._snapshot(
+            "weekend-reminder", state=state, today=today
+        )["reminder_due"] if today.weekday() >= 5 else False
+
+        gap_summary = None
+        prior_audit_end = max(
+            (end for end in audit_ends if end < target.end), default=None
+        ) if audit_recorded else latest_audit_end
+        if not audit_recorded or prior_audit_end is not None or delivered is not None:
+            requested_start = min((
+                prior_audit_end + timedelta(days=1)
+                if prior_audit_end is not None else
+                reporting_week_for(delivered).start if delivered is not None else target.start
+            ), target.start)
+            bounded_start = max(
+                requested_start,
+                target.end - timedelta(days=RECOVERY_HISTORY_DAYS - 1),
+            )
+            period_start = reporting_week_for(bounded_start).start
+            period_end = target.end
+            missed_weeks = []
+            cursor = period_start
+            while cursor <= period_end:
+                end = cursor + timedelta(days=6)
+                if end not in audit_ends and end <= period_end:
+                    missed_weeks.append({
+                        "week_start": cursor.isoformat(),
+                        "week_end": end.isoformat(),
+                    })
+                cursor += timedelta(days=7)
+            start_moment = datetime.combine(
+                period_start - timedelta(days=1), datetime.max.time(), tzinfo=IST
+            )
+            end_moment = datetime.combine(period_end, datetime.max.time(), tzinfo=IST)
+            if missed_weeks or not audit_recorded:
+                gap_summary = {
+                    "period_start": period_start.isoformat(),
+                    "period_end": period_end.isoformat(),
+                    "period_truncated": period_start > requested_start,
+                    "missed_weeks": missed_weeks,
+                    "historical_completions": _recovery_credit(completed, start_moment, end_moment),
+                    "current": current,
+                }
+
+        progress_since = None
+        if delivered is not None:
+            cutoff = max(delivered, moment - timedelta(days=RECOVERY_HISTORY_DAYS))
+            progress_since = {
+                "since": cutoff.isoformat(),
+                "through": moment.isoformat(),
+                "period_truncated": cutoff > delivered,
+                **_recovery_credit(completed, cutoff, moment),
+            }
+        return {
+            "_control": state["CONTROL"],
+            "agenda_id": self.agenda_id,
+            "role": role,
+            "as_of": moment.isoformat(),
+            "audit_target_week_end": target.end.isoformat(),
+            "audit_recorded": audit_recorded,
+            "recorded_audit": (
+                asdict(_weekly_audit_projection(recorded_row))
+                if recorded_row is not None else None
+            ),
+            "latest_audit_end": latest_audit_end.isoformat() if latest_audit_end else None,
+            "reminder_due": weekday_reminder,
+            "weekend_reminder_due": weekend_reminder,
+            "recovery_constraints": {
+                "allow_new_tasks_today": today.weekday() != 6,
+                "backdate_tasks": False,
+                "stack_daily_search_quotas": False,
+            },
+            "gap_summary": gap_summary,
+            "progress_since": progress_since,
+            "current_work": {
+                "as_of": moment.isoformat(),
+                "priority_open_tasks": [
+                    _recovery_open_task(row) for row in open_rows[:4]
+                ],
+                "active_workload_events": [{
+                    "event_id": event["event_id"],
+                    "event_type": event["event_type"],
+                    "title": _clip(event["title"], 120),
+                    "end": event["end"],
+                    "estimated_minutes": event["estimated_minutes"],
+                } for event in self._active_events(today, state["WORKLOAD_EVENTS"])[:4]],
+                "deadlines": current["deadlines"],
+            },
+        }
 
     def list_tasks(self) -> list[dict]:
         return self.gateway.rows("TASKS")

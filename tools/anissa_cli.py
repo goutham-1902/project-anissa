@@ -7,28 +7,40 @@ from datetime import date, datetime
 import json
 from pathlib import Path
 import sys
+from typing import TYPE_CHECKING
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from anissa.core import AnissaCore
 from logic.telemetry import telemetry_context
-from logic.workbook_io import WorkbookGateway
 from project.dispatch import DispatchGate
 from project.environment import ProjectEnvironment, resolve_environment
+from project.recovery import latest_audit_due_week_end, plan_recovery
+from project.telemetry_contract import IST
 
 
 ENVIRONMENT = resolve_environment(ROOT)
+
+if TYPE_CHECKING:
+    from logic.workbook_io import WorkbookGateway
+
+
+def _new_gateway(environment: ProjectEnvironment):
+    from logic.workbook_io import WorkbookGateway
+    return WorkbookGateway(environment=environment)
 
 
 def _core(
     gateway: WorkbookGateway,
     environment: ProjectEnvironment | None = None,
-) -> AnissaCore:
+    *,
+    today: date | None = None,
+) -> "AnissaCore":
+    from anissa.core import AnissaCore
     return AnissaCore(
         environment or ENVIRONMENT,
         gateway=gateway,
-        today_provider=date.today,
+        today_provider=(lambda: today) if today is not None else date.today,
         telemetry_loader=telemetry_context,
     )
 
@@ -80,6 +92,11 @@ def build_parser() -> argparse.ArgumentParser:
         ],
     )
     snapshot.add_argument("--week-ending", type=_iso_date)
+    snapshot.add_argument("--as-of", type=datetime.fromisoformat, help="logical reporting time for a recovered close")
+    recovery = commands.add_parser("recovery-plan")
+    campaign_commands.append(recovery)
+    recovery.add_argument("--role", choices=["COMMAND", "WEEKDAY_OPS", "WEEKEND"], required=True)
+    recovery.add_argument("--as-of", type=datetime.fromisoformat)
     task_status = commands.add_parser("set-task-status")
     campaign_commands.append(task_status)
     task_status.add_argument("task_id")
@@ -120,6 +137,13 @@ def build_parser() -> argparse.ArgumentParser:
         finish = commands.add_parser(name)
         finish.add_argument("dispatch_id")
         finish.add_argument("claim_token")
+        if name == "complete-dispatch":
+            finish.add_argument("--message-expected", action="store_true")
+    delivered = commands.add_parser("deliver-dispatch")
+    delivered.add_argument("dispatch_id")
+    delivered.add_argument("claim_token")
+    superseded = commands.add_parser("supersede-dispatch")
+    superseded.add_argument("dispatch_ids", nargs="+")
     for command in campaign_commands:
         command.add_argument(
             "--agenda",
@@ -140,17 +164,24 @@ def main(argv=None) -> int:
         )
         print(json.dumps(result, separators=(",", ":")))
         return 0
-    if args.cmd in {"complete-dispatch", "fail-dispatch"}:
+    if args.cmd in {"complete-dispatch", "fail-dispatch", "deliver-dispatch", "supersede-dispatch"}:
         gate = DispatchGate(ENVIRONMENT)
-        result = (
-            gate.complete(args.dispatch_id, args.claim_token)
-            if args.cmd == "complete-dispatch"
-            else gate.fail(args.dispatch_id, args.claim_token)
-        )
+        if args.cmd == "complete-dispatch":
+            result = gate.complete(args.dispatch_id, args.claim_token, message_expected=args.message_expected)
+        elif args.cmd == "fail-dispatch":
+            result = gate.fail(args.dispatch_id, args.claim_token)
+        elif args.cmd == "deliver-dispatch":
+            result = gate.deliver(args.dispatch_id, args.claim_token)
+        else:
+            result = gate.supersede(args.dispatch_ids)
         print(json.dumps(result, separators=(",", ":")))
         return 0
-    gateway = WorkbookGateway(environment=ENVIRONMENT)
-    core = _core(gateway)
+    gateway = _new_gateway(ENVIRONMENT)
+    snapshot_moment = args.as_of if args.cmd == "snapshot" else None
+    if snapshot_moment is not None:
+        snapshot_moment = (snapshot_moment.replace(tzinfo=IST) if snapshot_moment.tzinfo is None
+                           else snapshot_moment.astimezone(IST))
+    core = _core(gateway, today=snapshot_moment.date()) if snapshot_moment is not None else _core(gateway)
     agenda_id = args.agenda_id
     mutating = args.cmd in {
         "set-task-status",
@@ -182,9 +213,41 @@ def main(argv=None) -> int:
                 args.workflow,
                 agenda_id=agenda_id,
                 week_ending=args.week_ending,
+                as_of=snapshot_moment,
             )
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
+    elif args.cmd == "recovery-plan":
+        moment = args.as_of or datetime.now(IST)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=IST)
+        else:
+            moment = moment.astimezone(IST)
+        receipts = DispatchGate(ENVIRONMENT).state()
+        roles = ("WEEKDAY_OPS", "WEEKEND") if args.role == "COMMAND" else (args.role,)
+        plans = []
+        for role in roles:
+            initial = plan_recovery(role, now=moment, receipts=receipts)
+            context = core.recovery_state(
+                role, as_of=moment, agenda_id=args.agenda_id,
+                since=datetime.fromisoformat(initial["since"]) if initial["since"] else None,
+                week_ending=latest_audit_due_week_end(moment),
+            )
+            plan = plan_recovery(role, now=moment, receipts=receipts, state=context)
+            plans.append({**plan, "context": context} if plan["actions"] else plan)
+        if args.role == "COMMAND":
+            settings = json.loads(ENVIRONMENT.runtime_settings_path.read_text())
+            result = {"role": "COMMAND", "recoveries": [
+                {**plan, "target_thread_id": settings["chat_bindings"][plan["role"]]}
+                for plan in plans if plan["actions"]
+            ]}
+            if core.effective_gate(agenda_id=args.agenda_id).get("effective_mode") == "LIVE":
+                worker_plan = plan_recovery("THULA", now=moment, receipts=receipts)
+                thread = settings.get("worker_chat_bindings", {}).get("THULA")
+                if thread and worker_plan["actions"]:
+                    result["worker_recovery"] = {"target_thread_id": thread, "role": "THULA"}
+        else:
+            result = plans[0]
     elif args.cmd == "set-task-status":
         agenda.set_task_status(
             args.task_id,

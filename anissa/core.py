@@ -131,6 +131,54 @@ class AnissaCore:
             raise RuntimeError("Anissa Core cannot project campaign state outside effective LIVE mode")
         return agenda.projection(workflow, expected_control=control)
 
+    def recovery_state(
+        self,
+        role: str,
+        *,
+        as_of: datetime | None = None,
+        since: datetime | None = None,
+        week_ending: date | None = None,
+        agenda_id: str | None = None,
+    ) -> dict:
+        """Return bounded recovery facts from one agenda workbook generation."""
+
+        if role not in PERMANENT_ROLE_IDS:
+            raise ValueError(f"Unknown Anissa role: {role}")
+        moment = as_of or datetime.now(IST)
+        moment = moment.replace(tzinfo=IST) if moment.tzinfo is None else moment.astimezone(IST)
+        agenda = self.open_agenda(agenda_id, for_mutation=True)
+        if not hasattr(agenda, "recovery_state"):
+            raise RuntimeError(f"Agenda {agenda.agenda_id} does not support recovery")
+        facts = agenda.recovery_state(
+            role, as_of=moment, since=since, week_ending=week_ending
+        )
+        control = facts.pop("_control")
+        settings = json.loads(
+            self.environment.runtime_settings_path.read_text(encoding="utf-8")
+        )
+        gate = resolve_effective_mode(settings, control)
+        if not gate["ok"] or gate["effective_mode"] != "LIVE":
+            raise RuntimeError("Anissa Core cannot recover campaign state outside effective LIVE mode")
+        gap = facts.get("gap_summary")
+        if gap is not None:
+            telemetry = self._telemetry(
+                "recovery",
+                now=moment,
+                reporting_period=(
+                    date.fromisoformat(gap["period_start"]),
+                    date.fromisoformat(gap["period_end"]),
+                ),
+            )
+            facts["telemetry_gap_summary"] = {
+                key: telemetry[key]
+                for key in (
+                    "availability", "data_policy", "coverage_through", "reason",
+                    "recovery_period",
+                )
+                if key in telemetry
+            }
+        return {"live_gate": gate, **facts}
+
     def snapshot(
         self,
         workflow: str,

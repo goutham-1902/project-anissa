@@ -26,6 +26,15 @@ that require attention.
 
 ## Routine behavior
 
+At the next scheduled check, or on an actual Thula interaction or resume, run
+`recovery-plan` once. It requires LIVE worker mode and ACTIVE automation settings
+and selects only the latest due 21:00 Asia/Kolkata ingestion slot. Claim that
+slot's shared technical receipt for its `run_date` before acquiring an export;
+`busy` and `existing` are silent. A pending delivery never re-imports data.
+Complete the receipt for a successful or STALE check without a message. Fail it
+on a real acquisition or processing failure, preserving the previous publication.
+Use the newest complete full-history export once so missed days remain backfillable.
+
 Successful and unchanged-export runs are silent. A genuine failure reports only
 the stage, affected coverage, retry expectation and exact required action. A
 routine run may ingest, publish telemetry and verify dashboard health; it may
