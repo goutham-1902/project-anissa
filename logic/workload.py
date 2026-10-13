@@ -11,8 +11,9 @@ WORKLOAD_EVENT_TYPES={
 OPEN_TASK_STATES={'Not Started','Started','Blocked'}
 
 def discovery_ratios(india_status: str) -> tuple[float,float]:
+    """Keep an explicit user-disabled campaign out of future discovery."""
     s=(india_status or '').upper()
-    if s in {'SECURED','JOINED'}:
+    if s in {'SECURED','JOINED','DISABLED'}:
         return 1.0, 0.0
     return LONG_TERM_DEFAULT, INDIA_DEFAULT
 

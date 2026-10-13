@@ -53,6 +53,7 @@ class LogicTests(unittest.TestCase):
     def test_india_switch(self):
         self.assertEqual(discovery_ratios('SECURED'),(1.0,0.0))
         self.assertEqual(discovery_ratios('SEARCHING'),(0.6,0.4))
+        self.assertEqual(discovery_ratios('DISABLED'),(1.0,0.0))
 
     def test_surge(self):
         self.assertTrue(surge_allowed(meaningful_deadline=True,high_value=True,materially_lowers_risk=True))

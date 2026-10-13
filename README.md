@@ -34,6 +34,10 @@ eligibility, funding, deadlines, evidence, ranking, calculations or task state.
 The included clean persona is a reusable default; create personal extensions in
 the external instance and never commit that instance.
 
+Campaign participation remains an explicit local policy choice. The discovery
+logic supports a `DISABLED` bridge-campaign state that allocates no new bridge
+work without rewriting historical records or claiming a position was secured.
+
 The clean release includes Thula as a deterministic focus-telemetry worker.
 Her typed publication can inform workload context but cannot mutate an agenda,
 prove task completion or become a false zero when data is missing.
