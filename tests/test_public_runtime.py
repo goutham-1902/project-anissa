@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import unittest
+from types import SimpleNamespace
+from unittest.mock import MagicMock, Mock, patch
 
 from openpyxl import load_workbook
 
@@ -14,7 +16,7 @@ from project.governance import Governance
 from project.telemetry_contract import read_publication
 from soldiers.thula import cli as thula_cli
 from soldiers.thula.src import accounting as thula_accounting
-from soldiers.thula.src.dashboard_server import dashboard_build_id, dashboard_health
+from soldiers.thula.src.dashboard_server import dashboard_build_id, dashboard_health, make_handler
 
 
 class PublicRuntimeTests(unittest.TestCase):
@@ -100,6 +102,29 @@ class PublicRuntimeTests(unittest.TestCase):
         self.assertEqual(health["service"], "thula-dashboard")
         self.assertEqual(health["build_id"], build_id)
         self.assertEqual(len(build_id), 16)
+
+    def test_public_ui_keeps_serving_after_source_read_denial(self):
+        worker = self.environment.worker("thula")
+        handler = make_handler(
+            static_root=RELEASE_ROOT / "soldiers/thula/dashboard",
+            worklog_path=worker.publication_root / "worklog.csv",
+            status_path=worker.publication_root / "status.json",
+            environment=self.environment, build_id="fixture-build",
+        )
+        with patch.object(Path, "read_bytes", side_effect=PermissionError("Source denied")):
+            for route in ("/", "/index.html", "/styles.css", "/app.js"):
+                response = SimpleNamespace(path=route, _send=Mock())
+                handler.do_GET(response)
+                self.assertEqual(response._send.call_args.args[0], 200)
+                self.assertTrue(response._send.call_args.args[1])
+
+    def test_page_readiness_rejects_empty_html(self):
+        response = MagicMock(status=200)
+        response.__enter__.return_value = response
+        response.headers.get_content_type.return_value = "text/html"
+        response.read.return_value = b""
+        with patch("soldiers.thula.cli.urlopen", return_value=response):
+            self.assertFalse(thula_cli._page_ready("127.0.0.1", 8765))
 
     def test_private_instance_and_clean_presentation_are_separate(self):
         self.assertFalse((RELEASE_ROOT / "brain").exists())

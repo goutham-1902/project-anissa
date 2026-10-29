@@ -42,6 +42,10 @@ The clean release includes Thula as a deterministic focus-telemetry worker.
 Her typed publication can inform workload context but cannot mutate an agenda,
 prove task completion or become a false zero when data is missing.
 
+The local dashboard caches its three public UI files at startup and checks the
+actual page/CSS/JS before declaring readiness. This protects against request-time
+source-file access loss; it does not grant OS permissions or activate autostart.
+
 Missed local runs are coalesced on the next existing scheduled wake or actual
 role interaction. The shared recovery module selects current allocations or the
 latest closed-week audit, not a backlog of expired notifications. Technical

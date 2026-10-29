@@ -25,6 +25,14 @@ routine claims the dated receipt before acquisition and completes it for
 `COMPLETE` or `STALE`, or fails it on a real error. A full-history export can
 backfill missed days without replaying old daily slots.
 
+The dashboard loads its three public HTML/CSS/JS files into memory before it
+binds its local port. A missing or unreadable file prevents startup; requests
+do not reopen those files from the Desktop checkout. `ensure-server` checks the
+actual page and its CSS/JS as well as the build ID, and may restart only a
+verified Thula-owned process. This guards against a healthy `/health` response
+while the page is broken. It does not grant macOS Desktop access or install or
+load the login LaunchAgent.
+
 ## Mac login autostart
 
 `launchd/com.anissa.thula-dashboard.plist.template` is the governed source for

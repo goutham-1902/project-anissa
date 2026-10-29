@@ -20,6 +20,8 @@ MIME = {
     ".svg": "image/svg+xml",
 }
 
+PUBLIC_STATIC = ("index.html", "styles.css", "app.js")
+
 BUILD_INPUTS = (
     "anissa/**/*.py",
     "logic/**/*.py",
@@ -63,6 +65,21 @@ def dashboard_health(build_id: str) -> dict:
     }
 
 
+def _load_public_static(static_root: Path) -> dict[str, tuple[bytes, str]]:
+    """Freeze the small public UI before the server advertises readiness."""
+    assets = {}
+    for name in PUBLIC_STATIC:
+        try:
+            content = (static_root / name).read_bytes()
+        except OSError as exc:
+            raise RuntimeError(f"Dashboard static asset {name} is unreadable") from exc
+        if not content:
+            raise RuntimeError(f"Dashboard static asset {name} is empty")
+        assets[f"/{name}"] = (content, MIME[Path(name).suffix])
+    assets["/"] = assets["/index.html"]
+    return assets
+
+
 def resolve_static_path(
     request_path: str,
     *,
@@ -84,6 +101,7 @@ def resolve_static_path(
 
 def make_handler(*, static_root: Path, worklog_path: Path, status_path: Path,
                  environment: ProjectEnvironment, build_id: str | None = None):
+    public_assets = _load_public_static(static_root)
     runtime_build_id = build_id or dashboard_build_id(environment.release_root)
 
     class DashboardHandler(BaseHTTPRequestHandler):
@@ -119,6 +137,14 @@ def make_handler(*, static_root: Path, worklog_path: Path, status_path: Path,
                     payload = json.dumps({"error": type(exc).__name__, "message": str(exc)}).encode("utf-8")
                     self._send(500, payload, "application/json; charset=utf-8")
                 return
+            public_asset = public_assets.get(path)
+            if public_asset is not None:
+                content, content_type = public_asset
+                self._send(200, content, content_type)
+                return
+            if not path.startswith("/assets/"):
+                self._send(404, b"Not found", "text/plain; charset=utf-8")
+                return
             candidate = resolve_static_path(
                 path,
                 static_root=static_root,
@@ -142,7 +168,6 @@ def run_server(*, host: str, port: int, static_root: Path, worklog_path: Path,
     handler = make_handler(
         static_root=static_root, worklog_path=worklog_path,
         status_path=status_path, environment=environment,
-        build_id=dashboard_build_id(environment.release_root),
     )
     server = ThreadingHTTPServer((host, port), handler)
     server.serve_forever()

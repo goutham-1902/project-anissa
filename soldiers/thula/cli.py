@@ -71,6 +71,32 @@ def _health(host: str, port: int, timeout: float = 2.0) -> dict | None:
         return None
 
 
+def _page_ready(host: str, port: int, timeout: float = 2.0) -> bool:
+    """Probe the UI that a user opens, not only the process health route."""
+    base = f"http://{host}:{port}"
+    try:
+        with urlopen(f"{base}/", timeout=timeout) as response:
+            html = response.read()
+            if (response.status != 200
+                    or response.headers.get_content_type() != "text/html"
+                    or b"<html" not in html.lower()
+                    or b"/styles.css" not in html
+                    or b"/app.js" not in html):
+                return False
+        for path, content_type in (
+            ("/styles.css", "text/css"),
+            ("/app.js", "application/javascript"),
+        ):
+            with urlopen(f"{base}{path}", timeout=timeout) as response:
+                if (response.status != 200
+                        or response.headers.get_content_type() != content_type
+                        or not response.read(1)):
+                    return False
+        return True
+    except Exception:
+        return False
+
+
 def _dashboard_process_command(pid: int) -> str:
     result = subprocess.run(
         ["ps", "-p", str(pid), "-o", "command="],
@@ -230,6 +256,7 @@ def main(argv=None) -> int:
             health
             and health.get("service") == "thula-dashboard"
             and health.get("build_id") == current_build
+            and _page_ready(args.host, args.port)
         ):
             print(json.dumps({
                 "state": "running", "url": f"http://{args.host}:{args.port}/",
@@ -269,6 +296,7 @@ def main(argv=None) -> int:
                 started_health
                 and started_health.get("service") == "thula-dashboard"
                 and started_health.get("build_id") == current_build
+                and _page_ready(args.host, args.port)
             ):
                 print(json.dumps({
                     "state": state, "pid": process.pid,
