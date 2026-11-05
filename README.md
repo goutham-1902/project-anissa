@@ -56,6 +56,14 @@ schedule is required.
 
 ## Install and verify
 
+Graduate-applications instances can set a canonical email and `BUCKET_FIRST`
+planning in private workbook CONTROL. Shared projections group verified country,
+programme-family and application-mechanism metadata, then deadline waves;
+unknown classifications stay separate. Records, deadlines and evidence remain
+atomic. Live mail workflows validate a fresh connector profile (and a separate
+portal identity when applicable); local configuration checks alone are not
+authentication, and no email-sending authority is added.
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt

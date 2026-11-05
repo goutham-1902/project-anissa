@@ -58,6 +58,7 @@ class TaskProjection:
     evidence: str
     blocker: str | None
     depends_on_task_id: str | None
+    application_id: str = ""
 
 
 @dataclass(frozen=True)

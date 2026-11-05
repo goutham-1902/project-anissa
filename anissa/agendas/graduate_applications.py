@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import date, datetime, timedelta
+import json
 from math import isfinite
 from typing import Callable
 
+from logic.application_buckets import build_application_buckets
 from logic.ids import weekly_audit_id
 from logic.workbook_io import WorkbookGateway
 from logic.workload import date_value, replan_preview, task_remaining_minutes
@@ -194,6 +196,83 @@ def _recovery_open_task(row: dict) -> dict:
     }
 
 
+def _compact_planning(full: dict, *, bounded: bool) -> dict:
+    """Keep routine context small and expose all omitted IDs explicitly."""
+
+    summaries = [{
+            "bucket_id": bucket["bucket_id"],
+            "country": bucket["country"],
+            "programme_family": bucket["programme_family"],
+            "application_mechanism": bucket["application_mechanism"],
+            "needs_classification": bucket["needs_classification"],
+            "actionable": bucket["actionable"],
+            "earliest_actionable_deadline": bucket["earliest_actionable_deadline"],
+            "application_ids": [row["application_id"] for row in bucket["applications"]],
+            "task_ids": [row["task_id"] for row in bucket["tasks"]],
+            "application_count": len(bucket["applications"]),
+            "active_application_count": sum(
+                row["status"] in ACTIVE_APPLICATIONS for row in bucket["applications"]
+            ),
+            "open_task_count": sum(
+                row["status"] in OPEN_TASKS for row in bucket["tasks"]
+            ),
+            "urgent_task_ids": [
+                row["task_id"] for row in bucket["tasks"]
+                if row["status"] in OPEN_TASKS and row["priority"] == "Urgent"
+            ],
+            "blocked_task_ids": [
+                row["task_id"] for row in bucket["tasks"] if row["status"] == "Blocked"
+            ],
+            "remaining_task_minutes": bucket["remaining_task_minutes"],
+        } for bucket in full["buckets"]]
+    unassigned = [{
+            key: task[key] for key in (
+                "task_id", "application_id", "status", "priority", "due",
+                "due_date", "due_needs_verification", "remaining_minutes",
+            )
+        } for task in full["unassigned_tasks"]]
+    shown_buckets = (
+        [row for row in summaries if row["actionable"]][:6]
+        if bounded else summaries
+    )
+    shown_bucket_ids = {row["bucket_id"] for row in shown_buckets}
+    shown_unassigned = (
+        [row for row in unassigned if row["status"] in OPEN_TASKS][:8]
+        if bounded else unassigned
+    )
+    shown_task_ids = {row["task_id"] for row in shown_unassigned}
+    omitted_buckets = [
+        bucket for bucket in full["buckets"]
+        if bucket["bucket_id"] not in shown_bucket_ids
+    ]
+    omitted_tasks = [
+        task for bucket in omitted_buckets for task in bucket["tasks"]
+    ] + [task for task in full["unassigned_tasks"]
+         if task["task_id"] not in shown_task_ids]
+    return {
+        "buckets": shown_buckets,
+        "bucket_count": len(summaries),
+        "actionable_bucket_count": sum(row["actionable"] for row in summaries),
+        "additional_bucket_ids": [
+            row["bucket_id"] for row in summaries
+            if row["bucket_id"] not in shown_bucket_ids
+        ],
+        "unassigned_tasks": shown_unassigned,
+        "unassigned_task_count": len(unassigned),
+        "additional_unassigned_task_ids": [
+            row["task_id"] for row in unassigned
+            if row["task_id"] not in shown_task_ids
+        ],
+        "additional_urgent_task_ids": sorted(
+            task["task_id"] for task in omitted_tasks
+            if task["status"] in OPEN_TASKS and task["priority"] == "Urgent"
+        ),
+        "additional_blocked_task_ids": sorted(
+            task["task_id"] for task in omitted_tasks if task["status"] == "Blocked"
+        ),
+    }
+
+
 class GraduateApplicationsAgenda:
     """Own graduate-application workbook vocabulary behind one agenda interface."""
 
@@ -215,6 +294,60 @@ class GraduateApplicationsAgenda:
     def control(self) -> dict:
         return self.gateway.read_control()
 
+    @staticmethod
+    def _full_planning(state: dict, today: date) -> dict:
+        control = state["CONTROL"]
+        raw_metadata = control.get("application_bucket_metadata")
+        if raw_metadata in (None, ""):
+            metadata = {}
+        elif isinstance(raw_metadata, str):
+            metadata = json.loads(raw_metadata)
+        elif isinstance(raw_metadata, dict):
+            metadata = raw_metadata
+        else:
+            raise TypeError("Application bucket metadata must be JSON mapping")
+        return build_application_buckets(
+            state["APPLICATIONS"], state["TASKS"], metadata, as_of=today
+        )
+
+    @classmethod
+    def _planning_context(cls, state: dict, today: date) -> tuple[dict | None, dict | None]:
+        control = state["CONTROL"]
+        expected = control.get("canonical_application_email")
+        mail_identity = None
+        if "canonical_application_email" in control:
+            mail_identity = {
+                "canonical_application_email": (
+                    expected.strip().lower()
+                    if isinstance(expected, str) and expected.strip() else None
+                ),
+                "profile_verified": False,
+                "check_required": True,
+            }
+        if str(control.get("planning_mode") or "").strip().upper() != "BUCKET_FIRST":
+            return None, mail_identity
+        return _compact_planning(cls._full_planning(state, today), bounded=True), mail_identity
+
+    def bucket_index(self) -> dict:
+        """Return the full compact index on demand, without a second store."""
+
+        state = self.gateway.read_bundle("CONTROL", "APPLICATIONS", "TASKS")
+        if str(state["CONTROL"].get("planning_mode") or "").strip().upper() != "BUCKET_FIRST":
+            raise RuntimeError("Bucket index requires BUCKET_FIRST planning mode")
+        return _compact_planning(self._full_planning(state, self._today()), bounded=False)
+
+    def bucket_detail(self, bucket_id: str) -> dict:
+        """Return one full bucket from the current workbook generation."""
+
+        state = self.gateway.read_bundle("CONTROL", "APPLICATIONS", "TASKS")
+        if str(state["CONTROL"].get("planning_mode") or "").strip().upper() != "BUCKET_FIRST":
+            raise RuntimeError("Bucket detail requires BUCKET_FIRST planning mode")
+        full = self._full_planning(state, self._today())
+        for bucket in full["buckets"]:
+            if bucket["bucket_id"] == bucket_id:
+                return bucket
+        raise KeyError(bucket_id)
+
     def recovery_state(
         self,
         role: str,
@@ -233,6 +366,7 @@ class GraduateApplicationsAgenda:
         )
         tasks = state["TASKS"]
         today = moment.date()
+        planning, mail_identity = self._planning_context(state, today)
         audit_ends = {
             end for row in state["WEEKLY_AUDITS"]
             if (end := date_value(row.get("Week End"))) is not None and end <= target.end
@@ -341,7 +475,7 @@ class GraduateApplicationsAgenda:
                 "period_truncated": cutoff > delivered,
                 **_recovery_credit(completed, cutoff, moment),
             }
-        return {
+        result = {
             "_control": state["CONTROL"],
             "agenda_id": self.agenda_id,
             "role": role,
@@ -377,6 +511,11 @@ class GraduateApplicationsAgenda:
                 "deadlines": current["deadlines"],
             },
         }
+        if planning is not None:
+            result["planning"] = planning
+        if mail_identity is not None:
+            result["mail_identity"] = mail_identity
+        return result
 
     def list_tasks(self) -> list[dict]:
         return self.gateway.rows("TASKS")
@@ -548,12 +687,15 @@ class GraduateApplicationsAgenda:
             target_week.end if target_week is not None else today,
             state=state,
         )
+        planning, mail_identity = self._planning_context(state, today)
         compatibility = self._snapshot(
             workflow,
             state=state,
             today=today,
             audit_metrics=metrics,
             audit_week=target_week,
+            planning=planning,
+            mail_identity=mail_identity,
         )
         tasks = tuple(TaskProjection(
             agenda_id=self.agenda_id,
@@ -573,6 +715,7 @@ class GraduateApplicationsAgenda:
             evidence=str(row.get("Evidence") or ""),
             blocker=row.get("Blocker") or None,
             depends_on_task_id=row.get("Depends On Task ID") or None,
+            application_id=str(row.get("Application ID") or ""),
         ) for row in state["TASKS"] if row.get("Task ID"))
         applications = tuple(ApplicationProjection(
             agenda_id=self.agenda_id,
@@ -681,6 +824,8 @@ class GraduateApplicationsAgenda:
         today: date,
         audit_metrics: dict | None = None,
         audit_week: ReportingWeek | None = None,
+        planning: dict | None = None,
+        mail_identity: dict | None = None,
     ) -> dict:
         control = state["CONTROL"]
         tasks = state["TASKS"]
@@ -694,6 +839,10 @@ class GraduateApplicationsAgenda:
             "long_term_ratio": control.get("long_term_ratio"),
             "india_ratio": control.get("india_ratio"),
         }
+        if planning is not None:
+            base["planning"] = planning
+        if mail_identity is not None:
+            base["mail_identity"] = mail_identity
 
         if workflow == "weekday-reminder":
             due = [

@@ -78,9 +78,18 @@ def build_parser() -> argparse.ArgumentParser:
     campaign_commands.append(commands.add_parser("gate"))
     campaign_commands.append(commands.add_parser("portfolio"))
     campaign_commands.append(commands.add_parser("list-tasks"))
+    mail = commands.add_parser("mail-preflight")
+    campaign_commands.append(mail)
+    mail.add_argument("--profile-json", help="fresh current-workflow connector profile, not a saved assertion")
+    mail.add_argument("--operation", choices=["gmail", "outreach", "portal"], default="gmail")
+    mail.add_argument("--portal-email")
     detail = commands.add_parser("task-detail")
     campaign_commands.append(detail)
     detail.add_argument("task_id")
+    bucket = commands.add_parser("bucket-detail")
+    campaign_commands.append(bucket)
+    bucket.add_argument("bucket_id")
+    campaign_commands.append(commands.add_parser("bucket-index"))
     snapshot = commands.add_parser("snapshot")
     campaign_commands.append(snapshot)
     snapshot.add_argument(
@@ -201,12 +210,28 @@ def main(argv=None) -> int:
         result = agenda.control()
     elif args.cmd == "gate":
         result = core.effective_gate(agenda_id=agenda_id)
+    elif args.cmd == "mail-preflight":
+        from logic.mail_identity import check_mail_identity
+        try:
+            profile = json.loads(args.profile_json) if args.profile_json else None
+        except (ValueError, TypeError):
+            profile = None
+        result = check_mail_identity(agenda.control().get("canonical_application_email"), profile,
+            operation=args.operation, portal_email=args.portal_email)
+        if core.effective_gate(agenda_id=agenda_id).get("effective_mode") != "LIVE":
+            result = {"ok": False, "blocked": True, "reason": "Agenda is not effective LIVE"}
+        print(json.dumps(result, separators=(",", ":")))
+        return 0 if result["ok"] else 1
     elif args.cmd == "list-tasks":
         result = agenda.list_tasks()
     elif args.cmd == "task-detail":
         result = agenda.task_detail(args.task_id)
         if result is None:
             raise SystemExit(f"Unknown task: {args.task_id}")
+    elif args.cmd == "bucket-detail":
+        result = agenda.bucket_detail(args.bucket_id)
+    elif args.cmd == "bucket-index":
+        result = agenda.bucket_index()
     elif args.cmd == "snapshot":
         try:
             result = core.snapshot(

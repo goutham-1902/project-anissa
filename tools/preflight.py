@@ -14,6 +14,9 @@ SCHEMA=json.loads(ENVIRONMENT.schema_path.read_text())
 def main():
     parser=argparse.ArgumentParser(description='Validate the deployment without activating it')
     parser.add_argument('--automations-root',type=Path,default=Path.home()/'.codex'/'automations')
+    parser.add_argument('--mail-operation',choices=['gmail','outreach','portal'])
+    parser.add_argument('--mail-profile-json',help='fresh connector profile for a live mail-dependent workflow')
+    parser.add_argument('--portal-email')
     args=parser.parse_args()
     problems=[]
     if not BRAIN.exists(): problems.append('brain workbook missing')
@@ -49,6 +52,29 @@ def main():
         missing=sorted(set(SCHEMA['sheets'])-set(wb.sheetnames))
         if missing: problems.append(f'missing workbook sheets: {missing}')
         control={row[0]:row[1] for row in wb['CONTROL'].iter_rows(min_row=2,values_only=True) if row[0]}
+        if control.get('planning_mode') not in (None,'','FLAT','BUCKET_FIRST'):
+            problems.append('unsupported agenda planning mode')
+        if control.get('planning_mode') == 'BUCKET_FIRST' or control.get('canonical_application_email'):
+            from logic.mail_identity import check_mail_identity
+            expected=control.get('canonical_application_email')
+            if not check_mail_identity(expected,{'email':expected})['ok']:
+                problems.append('canonical application mail identity is missing or invalid')
+            try:
+                from logic.application_buckets import build_application_buckets
+                from datetime import date
+                metadata=json.loads(control.get('application_bucket_metadata') or '{}')
+                build_application_buckets([],[],metadata,as_of=date.today())
+            except (ValueError,TypeError,AttributeError):
+                problems.append('application bucket metadata is invalid')
+        if args.mail_operation or args.mail_profile_json is not None:
+            from logic.mail_identity import check_mail_identity
+            try:
+                profile=json.loads(args.mail_profile_json) if args.mail_profile_json else None
+            except (ValueError,TypeError):
+                profile=None
+            identity=check_mail_identity(control.get('canonical_application_email'),profile,
+                operation=args.mail_operation or 'gmail',portal_email=args.portal_email)
+            if not identity['ok']: problems.append('mail identity check blocked: '+identity['reason'])
         if control.get('schema_version') != schema_version:
             problems.append('workbook CONTROL schema_version does not match schema file')
         if str(control.get('package_version') or '') != str(settings.get('package_version') or ''):
@@ -90,6 +116,7 @@ def main():
         for x in problems: print('-',x)
         raise SystemExit(1)
     print('PREFLIGHT OK')
+    print('- mail identity: live workflow checked' if args.mail_operation or args.mail_profile_json is not None else '- mail identity: configuration only; fresh connector verification required before mail work')
     print(f'- package mode: {mode}')
     print('- brain workbook present')
     print(f'- schema version: {schema_version}')
