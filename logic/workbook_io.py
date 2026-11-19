@@ -10,7 +10,12 @@ from .ids import opportunity_id, task_id, application_id, scholarship_id, worklo
 from .dedupe import equivalent_opportunity, equivalent_task, equivalent_application, equivalent_scholarship
 from .workload import validate_workload_event, is_consequential_task_change, date_value
 from .runtime import resolve_effective_mode
+from .working_links import (
+    LINK_FIELDS, task_working_link, validate_task_link_write,
+    working_link_max_age, working_link_required,
+)
 from project.environment import ProjectEnvironment, resolve_environment
+from project.telemetry_contract import IST
 
 ENVIRONMENT=resolve_environment(Path(__file__).resolve().parents[1])
 ROOT=ENVIRONMENT.release_root
@@ -134,6 +139,15 @@ class WorkbookGateway:
             current={header:ws.cell(target,i+1).value for i,header in enumerate(headers)}
         merged={**current,**row}
         if sheet == 'TASKS':
+            control={str(values[0]):values[1] for values in wb['CONTROL'].iter_rows(min_row=2,values_only=True) if values[0]}
+            required=working_link_required(control)
+            if (required or any(key in row for key in LINK_FIELDS)) and not set(LINK_FIELDS).issubset(headers):
+                raise ValueError('TASKS working-link columns are required before link metadata can be written')
+            if action == 'insert' or any(key in row for key in LINK_FIELDS):
+                validate_task_link_write(
+                    merged,as_of=datetime.now(IST).date(),required=required,
+                    max_age_days=working_link_max_age(control),
+                )
             if not str(merged.get('Definition of Done') or '').strip():
                 raise ValueError('Meaningful tasks require a Definition of Done.')
             validate_transition(
@@ -238,6 +252,10 @@ class WorkbookGateway:
             results=[]
             try:
                 ws=wb['TASKS']
+                control={str(values[0]):values[1] for values in wb['CONTROL'].iter_rows(min_row=2,values_only=True) if values[0]}
+                link_required=working_link_required(control)
+                link_max_age=working_link_max_age(control)
+                today=datetime.now(IST).date()
                 existing=self._sheet_rows(ws)
                 for raw in tasks:
                     row=dict(raw)
@@ -251,9 +269,13 @@ class WorkbookGateway:
                         )}
                     action,record_id=self._upsert_locked(wb,'TASKS','Task ID',row)
                     persisted=next(item for item in self._sheet_rows(ws) if str(item.get('Task ID'))==record_id)
+                    link=task_working_link(
+                        persisted,as_of=today,required=link_required,max_age_days=link_max_age,
+                    )
                     results.append({
                         'action':action,'task_id':record_id,'title':persisted.get('Task Title'),
                         'due_date':persisted.get('Due Date'),'status':persisted.get('Status'),
+                        **({'working_link':link} if link is not None else {}),
                     })
                     existing=[item for item in existing if str(item.get('Task ID'))!=record_id]+[persisted]
                 self._atomic_save(wb)
@@ -263,7 +285,10 @@ class WorkbookGateway:
         missing=[row['task_id'] for row in results if row['task_id'] not in committed]
         if missing:
             raise RuntimeError(f'Daily plan read-back failed: {missing}')
-        self._log(self.events_path,{'action':'commit_daily_plan','tasks':results})
+        self._log(self.events_path,{'action':'commit_daily_plan','tasks':[
+            {key:value for key,value in item.items() if key != 'working_link'}
+            for item in results
+        ]})
         return results
 
     def upsert_application(self, row: dict) -> tuple[str,str]:

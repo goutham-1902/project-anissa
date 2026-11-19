@@ -40,6 +40,16 @@ class PortfolioProjection:
 
 
 @dataclass(frozen=True)
+class WorkingLinkProjection:
+    url: str | None
+    status: str
+    verified_at: str | None
+    verification_evidence: str | None
+    blocker: str | None
+    unblock_action: str | None
+
+
+@dataclass(frozen=True)
 class TaskProjection:
     agenda_id: str
     task_id: str
@@ -59,6 +69,7 @@ class TaskProjection:
     blocker: str | None
     depends_on_task_id: str | None
     application_id: str = ""
+    working_link: WorkingLinkProjection | None = None
 
 
 @dataclass(frozen=True)

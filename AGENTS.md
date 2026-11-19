@@ -38,6 +38,9 @@ scheduled work.
 - Completed tasks require evidence; blocked tasks require an unblock action.
 - Use the workbook gateway for every agenda mutation.
 - Use official sources when a primary source should exist.
+- Every assigned-task brief shows its verified working link or an explicit
+  missing-link diagnostic and unblock action; never guess URLs or alter task
+  status merely because link verification is missing.
 - Keep personal source documents outside the release checkout.
 
 ## Workers

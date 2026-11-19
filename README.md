@@ -64,6 +64,11 @@ atomic. Live mail workflows validate a fresh connector profile (and a separate
 portal identity when applicable); local configuration checks alone are not
 authentication, and no email-sending authority is added.
 
+Task briefs also carry a verified working link or an explicit missing-link
+diagnostic and recovery action. Source authority, relevance and entrypoint
+checks are recorded with a date; expired or unsafe URLs are withheld. This
+presentation contract never changes task completion or invents a URL.
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt

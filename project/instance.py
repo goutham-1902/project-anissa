@@ -62,6 +62,8 @@ def _empty_workbook(environment: ProjectEnvironment, package_version: str) -> No
         ),
         ("india_campaign_status", "PAUSED", "Configure the active agenda before go-live."),
         ("writing_mode", "USER_WRITES_ALL", "Pre-writing briefs only."),
+        ("task_working_link_required", True, "Task briefs require a verified link or an explicit link blocker."),
+        ("working_link_max_age_days", 7, "Maximum IST calendar-day age of a task link check."),
         ("last_updated", datetime.now().isoformat(timespec="seconds"), "Instance initialization."),
     )
     for row in control_rows:

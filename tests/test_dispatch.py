@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from project.dispatch import DispatchGate, dispatch_id
 from project.environment import ProjectEnvironment, RELEASE_ROOT
@@ -67,6 +68,23 @@ class DispatchGateTests(unittest.TestCase):
         self.environment.dispatch_slots_path.write_text("not-json")
         with self.assertRaisesRegex(RuntimeError, "receipt store is invalid"):
             self.gate.claim("weekday-morning")
+
+    def test_claim_and_delivery_tokens_are_safe_cli_positionals(self):
+        from tools.anissa_cli import build_parser
+        with patch('project.dispatch.token_urlsafe', side_effect=['-initial', '-retry']):
+            claim = self.gate.claim('weekday-morning')
+            parsed = build_parser().parse_args([
+                'complete-dispatch', claim['dispatch_id'], claim['claim_token'], '--message-expected',
+            ])
+            self.assertEqual(parsed.claim_token, claim['claim_token'])
+            self.gate.complete(claim['dispatch_id'], claim['claim_token'], message_expected=True)
+            self.now[0] += timedelta(minutes=3)
+            retry = self.gate.claim('weekday-morning')
+            parsed = build_parser().parse_args([
+                'deliver-dispatch', retry['dispatch_id'], retry['claim_token'],
+            ])
+            self.assertEqual(parsed.claim_token, retry['claim_token'])
+            self.gate.deliver(retry['dispatch_id'], retry['claim_token'])
 
 
 if __name__ == "__main__":

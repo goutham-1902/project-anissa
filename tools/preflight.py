@@ -52,6 +52,11 @@ def main():
         missing=sorted(set(SCHEMA['sheets'])-set(wb.sheetnames))
         if missing: problems.append(f'missing workbook sheets: {missing}')
         control={row[0]:row[1] for row in wb['CONTROL'].iter_rows(min_row=2,values_only=True) if row[0]}
+        from logic.working_links import working_link_max_age
+        try:
+            working_link_max_age(control)
+        except (ValueError, TypeError, OverflowError):
+            problems.append('working-link freshness policy is invalid')
         if control.get('planning_mode') not in (None,'','FLAT','BUCKET_FIRST'):
             problems.append('unsupported agenda planning mode')
         if control.get('planning_mode') == 'BUCKET_FIRST' or control.get('canonical_application_email'):

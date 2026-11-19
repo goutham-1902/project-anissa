@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "canonical_file": "brain/anissa_brain.xlsx",
   "sheets": {
     "CONTROL": [
@@ -147,7 +147,11 @@
       "Workload Event ID",
       "Depends On Task ID",
       "Remaining Minutes",
-      "Actual Minutes"
+      "Actual Minutes",
+      "Working Link URL",
+      "Working Link Verified At",
+      "Working Link Verification Evidence",
+      "Working Link Unblock Action"
     ],
     "WORKLOAD_EVENTS": [
       "Event ID",

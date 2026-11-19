@@ -290,7 +290,11 @@ def main(argv=None) -> int:
         return 0
     elif args.cmd == "record-reminder":
         agenda.record_reminders(args.task_ids)
-        result = {"updated": args.task_ids}
+        result = {"updated": args.task_ids, "tasks": [
+            {"task_id": task_id, "working_link": task["working_link"]}
+            for task_id in args.task_ids
+            if (task := agenda.task_detail(task_id)) is not None and "working_link" in task
+        ]}
     elif args.cmd in {"preview-replan", "apply-replan"}:
         event = json.loads(args.event_json)
         changes = json.loads(args.changes_json)

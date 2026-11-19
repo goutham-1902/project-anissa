@@ -9,6 +9,9 @@ from typing import Callable
 from logic.application_buckets import build_application_buckets
 from logic.ids import weekly_audit_id
 from logic.workbook_io import WorkbookGateway
+from logic.working_links import (
+    LINK_FIELDS, task_working_link, working_link_max_age, working_link_required,
+)
 from logic.workload import date_value, replan_preview, task_remaining_minutes
 from project.environment import ProjectEnvironment
 from project.projections import (
@@ -18,6 +21,7 @@ from project.projections import (
     CompletedTaskCreditProjection,
     DeadlineProjection,
     TaskProjection,
+    WorkingLinkProjection,
     WeeklyAuditRecordProjection,
     WorkloadEventProjection,
 )
@@ -79,7 +83,17 @@ def _task_sort(row: dict) -> tuple:
     return (PRIORITY.get(str(row.get("Priority") or ""), 9), due, str(row.get("Task ID") or ""))
 
 
-def _compact_task(row: dict, *, include_definition: bool = False) -> dict:
+def _link_for(row: dict, control: dict, today: date) -> dict | None:
+    return task_working_link(
+        row, as_of=today, required=working_link_required(control),
+        max_age_days=working_link_max_age(control),
+    )
+
+
+def _compact_task(
+    row: dict, *, include_definition: bool = False,
+    control: dict | None = None, as_of: date | None = None,
+) -> dict:
     result = {
         "task_id": row.get("Task ID"),
         "title": row.get("Task Title"),
@@ -100,6 +114,10 @@ def _compact_task(row: dict, *, include_definition: bool = False) -> dict:
     }
     if include_definition:
         result["definition_of_done"] = row.get("Definition of Done")
+    if control is not None and as_of is not None:
+        link = _link_for(row, control, as_of)
+        if link is not None:
+            result["working_link"] = link
     return result
 
 
@@ -184,8 +202,8 @@ def _recovery_credit(rows: list[dict], start: datetime, end: datetime) -> dict:
     }
 
 
-def _recovery_open_task(row: dict) -> dict:
-    return {
+def _recovery_open_task(row: dict, *, control: dict, as_of: date) -> dict:
+    result = {
         "task_id": str(row.get("Task ID") or ""),
         "title": _clip(row.get("Task Title"), 120),
         "status": str(row.get("Status") or ""),
@@ -194,6 +212,10 @@ def _recovery_open_task(row: dict) -> dict:
         "owner_chat": str(row.get("Owner Chat") or ""),
         "exact_next_action": _clip(row.get("Definition of Done"), 180),
     }
+    link = _link_for(row, control, as_of)
+    if link is not None:
+        result["working_link"] = link
+    return result
 
 
 def _compact_planning(full: dict, *, bounded: bool) -> dict:
@@ -342,9 +364,15 @@ class GraduateApplicationsAgenda:
         state = self.gateway.read_bundle("CONTROL", "APPLICATIONS", "TASKS")
         if str(state["CONTROL"].get("planning_mode") or "").strip().upper() != "BUCKET_FIRST":
             raise RuntimeError("Bucket detail requires BUCKET_FIRST planning mode")
-        full = self._full_planning(state, self._today())
+        today = self._today()
+        full = self._full_planning(state, today)
         for bucket in full["buckets"]:
             if bucket["bucket_id"] == bucket_id:
+                by_id = {str(row.get("Task ID")): row for row in state["TASKS"]}
+                for task in bucket["tasks"]:
+                    link = _link_for(by_id[task["task_id"]], state["CONTROL"], today)
+                    if link is not None:
+                        task["working_link"] = link
                 return bucket
         raise KeyError(bucket_id)
 
@@ -405,10 +433,12 @@ class GraduateApplicationsAgenda:
                 "title": _clip(row.get("Task Title"), 120),
                 "blocker": _clip(row.get("Blocker"), 140),
                 "unblock_action": _clip(row.get("Unblock Action"), 140),
+                **({"working_link": link} if (link := _link_for(row, state["CONTROL"], today)) is not None else {}),
             } for row in blockers[:RECOVERY_ROW_LIMIT]],
             "blocker_count": len(blockers),
             "overdue": [
-                _recovery_open_task(row) for row in overdue[:RECOVERY_ROW_LIMIT]
+                _recovery_open_task(row, control=state["CONTROL"], as_of=today)
+                for row in overdue[:RECOVERY_ROW_LIMIT]
             ],
             "overdue_count": len(overdue),
             "deadlines": [{
@@ -499,7 +529,8 @@ class GraduateApplicationsAgenda:
             "current_work": {
                 "as_of": moment.isoformat(),
                 "priority_open_tasks": [
-                    _recovery_open_task(row) for row in open_rows[:4]
+                    _recovery_open_task(row, control=state["CONTROL"], as_of=today)
+                    for row in open_rows[:4]
                 ],
                 "active_workload_events": [{
                     "event_id": event["event_id"],
@@ -518,13 +549,24 @@ class GraduateApplicationsAgenda:
         return result
 
     def list_tasks(self) -> list[dict]:
-        return self.gateway.rows("TASKS")
+        state = self.gateway.read_bundle("CONTROL", "TASKS")
+        return [self._task_view(row, state["CONTROL"], self._today()) for row in state["TASKS"]]
+
+    @staticmethod
+    def _task_view(row: dict, control: dict, today: date) -> dict:
+        link = _link_for(row, control, today)
+        if link is None:
+            return row
+        result = {key: value for key, value in row.items() if key not in LINK_FIELDS}
+        result["working_link"] = link
+        return result
 
     def task_detail(self, task_id: str) -> dict | None:
-        return next(
-            (row for row in self.list_tasks() if str(row.get("Task ID") or "") == task_id),
-            None,
-        )
+        state = self.gateway.read_bundle("CONTROL", "TASKS")
+        return next((
+            self._task_view(row, state["CONTROL"], self._today())
+            for row in state["TASKS"] if str(row.get("Task ID") or "") == task_id
+        ), None)
 
     def set_task_status(self, task_id: str, status: str, **evidence) -> None:
         self.gateway.set_task_status(task_id, status, **evidence)
@@ -567,7 +609,7 @@ class GraduateApplicationsAgenda:
         reporting_week = reporting_week_for(today)
         week_start = reporting_week.start
         week_end = reporting_week.end
-        state = state or self.gateway.read_bundle("TASKS", "APPLICATIONS", "BUDGET")
+        state = state or self.gateway.read_bundle("CONTROL", "TASKS", "APPLICATIONS", "BUDGET")
         tasks = state["TASKS"]
         applications = state["APPLICATIONS"]
         budget = state["BUDGET"]
@@ -659,7 +701,10 @@ class GraduateApplicationsAgenda:
                 "blocker": row.get("Blocker"),
                 "unblock_action": row.get("Unblock Action"),
             } for row in stale],
-            "overdue_tasks": [_compact_task(row) for row in sorted(overdue, key=_task_sort)[:5]],
+            "overdue_tasks": [
+                _compact_task(row, control=state.get("CONTROL"), as_of=today)
+                for row in sorted(overdue, key=_task_sort)[:5]
+            ],
             "deadlines_60_days": deadlines[:8],
             "achievement_candidates": achievements,
         }
@@ -716,6 +761,10 @@ class GraduateApplicationsAgenda:
             blocker=row.get("Blocker") or None,
             depends_on_task_id=row.get("Depends On Task ID") or None,
             application_id=str(row.get("Application ID") or ""),
+            working_link=(
+                WorkingLinkProjection(**link)
+                if (link := _link_for(row, state["CONTROL"], today)) is not None else None
+            ),
         ) for row in state["TASKS"] if row.get("Task ID"))
         applications = tuple(ApplicationProjection(
             agenda_id=self.agenda_id,
@@ -852,7 +901,10 @@ class GraduateApplicationsAgenda:
             result = {
                 **base,
                 "reminder_due": bool(due),
-                "due_reminders": [_compact_task(row, include_definition=True) for row in due],
+                "due_reminders": [
+                    _compact_task(row, include_definition=True, control=control, as_of=today)
+                    for row in due
+                ],
             }
             return result
 
@@ -875,7 +927,7 @@ class GraduateApplicationsAgenda:
                 "weekend_end": sunday.isoformat(),
                 "reminder_due": reminder_due,
                 "bundle_tasks": [
-                    _compact_task(row, include_definition=reminder_due)
+                    _compact_task(row, include_definition=reminder_due, control=control, as_of=today)
                     for row in sorted(weekend, key=_task_sort)
                 ],
             }
@@ -925,7 +977,7 @@ class GraduateApplicationsAgenda:
                     "status_counts": statuses,
                 },
                 "today_tasks": [{
-                    **_compact_task(row, include_definition=True),
+                    **_compact_task(row, include_definition=True, control=control, as_of=today),
                     "completed_at": _iso(row.get("Completed At")),
                     "evidence": _clip(row.get("Evidence"), 180),
                 } for row in today_rows[:6]],
@@ -937,7 +989,8 @@ class GraduateApplicationsAgenda:
                     "minutes": row.get("Actual Minutes") or row.get("Estimated Minutes"),
                 } for row in completed_today[:4]],
                 "overdue_carryover": [
-                    _compact_task(row, include_definition=True) for row in carryover[:2]
+                    _compact_task(row, include_definition=True, control=control, as_of=today)
+                    for row in carryover[:2]
                 ],
                 "exact_next_action": (
                     _clip(next_row.get("Definition of Done"), 180)
@@ -1012,7 +1065,7 @@ class GraduateApplicationsAgenda:
                     "suppress_new_bundle": scheduled >= effective_minimum,
                 },
                 "weekend_tasks": [
-                    _compact_task(row, include_definition=True)
+                    _compact_task(row, include_definition=True, control=control, as_of=today)
                     for row in sorted(weekend_rows, key=_task_sort)[:6]
                 ],
             }
@@ -1049,7 +1102,9 @@ class GraduateApplicationsAgenda:
                 "external_capacity_minutes": external,
                 "suppress_new_task_creation": scheduled >= capacity,
             },
-            "priority_open_tasks": [_compact_task(row) for row in open_rows[:4]],
+            "priority_open_tasks": [
+                _compact_task(row, control=control, as_of=today) for row in open_rows[:4]
+            ],
             "active_applications": [{
                 "application_id": row.get("Application ID"),
                 "programme": row.get("Programme / Position"),

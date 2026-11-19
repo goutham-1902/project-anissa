@@ -69,7 +69,7 @@ class DispatchGate:
                     expires = existing.get("delivery_lease_expires_at")
                     if expires and datetime.fromisoformat(expires) > now:
                         return self._result("busy", existing)
-                    existing["delivery_token"] = token_urlsafe(18)
+                    existing["delivery_token"] = "claim_" + token_urlsafe(18)
                     existing["delivery_lease_expires_at"] = (now + timedelta(seconds=120)).isoformat(timespec="seconds")
                     self._write(payload)
                     return {**self._result("delivery", existing), "claim_token": existing["delivery_token"]}
@@ -88,7 +88,7 @@ class DispatchGate:
                 if lease_expires > now:
                     return self._result("busy", existing)
 
-            token = token_urlsafe(18)
+            token = "claim_" + token_urlsafe(18)
             record = {
                 "dispatch_id": receipt_id,
                 "slot": str(slot).strip().lower(),
