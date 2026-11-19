@@ -1,5 +1,7 @@
 from __future__ import annotations
 from datetime import date, datetime
+from .dedupe import equivalent_task
+from .ids import task_id
 
 LONG_TERM_DEFAULT=0.60
 INDIA_DEFAULT=0.40
@@ -65,34 +67,73 @@ def is_consequential_task_change(current: dict, change: dict) -> bool:
     return False
 
 
+def resolve_replan_changes(tasks: list[dict], changes: list[dict], *, event_id: str | None = None) -> dict:
+    """Resolve each change against current and earlier changes in this batch.
+
+    Explicit IDs remain exact. An ID-less change may update only one equivalent
+    task; otherwise it creates a deterministic ID or fails closed on ambiguity.
+    """
+    simulated=[dict(row) for row in tasks]
+    known_ids=[str(row.get('Task ID')) for row in simulated if row.get('Task ID')]
+    if len(known_ids) != len(set(known_ids)):
+        raise ValueError('Replan input has duplicate Task IDs')
+    before=sum(task_remaining_minutes(row) for row in simulated)
+    affected=[]
+    consequential=[]
+    prepared=[]
+    for raw in changes:
+        change=dict(raw)
+        if event_id is not None:
+            change['Workload Event ID']=change.get('Workload Event ID') or event_id
+        explicit_id=str(change.get('Task ID') or '')
+        if explicit_id and not explicit_id.strip():
+            raise ValueError('Task ID cannot be blank whitespace')
+        if explicit_id:
+            matches=[row for row in simulated if str(row.get('Task ID') or '') == explicit_id]
+        else:
+            matches=[row for row in simulated if equivalent_task(row,change)]
+        if len(matches) > 1:
+            raise ValueError('Replan task change matches multiple existing tasks')
+        current=matches[0] if matches else None
+        if current:
+            resolved_id=str(current.get('Task ID') or '')
+            if not resolved_id:
+                raise ValueError('Equivalent replan task has no Task ID')
+            if is_consequential_task_change(current,change):
+                consequential.append(resolved_id)
+            change={'Definition of Done':current.get('Definition of Done'),**change,'Task ID':resolved_id}
+            current.update(change)
+        else:
+            resolved_id=explicit_id or task_id(
+                str(change.get('Application ID') or ''),str(change.get('Category') or ''),
+                str(change.get('Task Title') or ''),str(change.get('Assigned Date') or ''),
+            )
+            if any(str(row.get('Task ID') or '') == resolved_id for row in simulated):
+                raise ValueError('Generated Task ID collides with another task')
+            change={**change,'Task ID':resolved_id}
+            simulated.append(dict(change))
+        affected.append(resolved_id)
+        prepared.append(change)
+    return {
+        'prepared':prepared,
+        'affected_task_ids':list(dict.fromkeys(affected)),
+        'consequential_task_ids':list(dict.fromkeys(consequential)),
+        'open_minutes_before':before,
+        'open_minutes_after':sum(task_remaining_minutes(row) for row in simulated),
+    }
+
+
 def replan_preview(tasks: list[dict], event: dict, changes: list[dict]) -> dict:
     validate_workload_event(event)
-    by_id={str(row.get('Task ID')):row for row in tasks if row.get('Task ID')}
-    consequential=[]
-    affected=[]
-    before=sum(task_remaining_minutes(row) for row in tasks)
-    simulated=[dict(row) for row in tasks]
-    simulated_by_id={str(row.get('Task ID')):row for row in simulated if row.get('Task ID')}
-    for change in changes:
-        task_id_value=str(change.get('Task ID') or '')
-        current=by_id.get(task_id_value)
-        if current and is_consequential_task_change(current,change):
-            consequential.append(task_id_value)
-        if task_id_value:
-            affected.append(task_id_value)
-        if task_id_value in simulated_by_id:
-            simulated_by_id[task_id_value].update(change)
-        else:
-            simulated.append(dict(change))
-    after=sum(task_remaining_minutes(row) for row in simulated)
+    resolved=resolve_replan_changes(tasks,changes)
     return {
         'event_type':str(event.get('Event Type') or '').upper(),
         'title':event.get('Title'),
-        'affected_task_ids':affected,
-        'consequential_task_ids':consequential,
-        'open_minutes_before':before,
-        'open_minutes_after':after,
-        'requires_consequential_approval':bool(consequential),
+        'affected_task_ids':resolved['affected_task_ids'],
+        'consequential_task_ids':resolved['consequential_task_ids'],
+        'open_minutes_before':resolved['open_minutes_before'],
+        'open_minutes_after':resolved['open_minutes_after'],
+        'requires_consequential_approval':bool(resolved['consequential_task_ids']),
     }
 
 

@@ -69,6 +69,11 @@ diagnostic and recovery action. Source authority, relevance and entrypoint
 checks are recorded with a date; expired or unsafe URLs are withheld. This
 presentation contract never changes task completion or invents a URL.
 
+Workload replans resolve task identity before previewing or checking approval.
+Matched tasks count once; ambiguous matches fail closed. Cancellation, deadline
+extensions and disruption of started work require explicit consequential
+approval. Rejection leaves the original workbook unchanged.
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt

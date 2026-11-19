@@ -8,7 +8,7 @@ from .locks import exclusive_lock
 from .task_state import validate_transition
 from .ids import opportunity_id, task_id, application_id, scholarship_id, workload_event_id, weekly_audit_id
 from .dedupe import equivalent_opportunity, equivalent_task, equivalent_application, equivalent_scholarship
-from .workload import validate_workload_event, is_consequential_task_change, date_value
+from .workload import validate_workload_event, resolve_replan_changes, date_value
 from .runtime import resolve_effective_mode
 from .working_links import (
     LINK_FIELDS, task_working_link, validate_task_link_write,
@@ -331,32 +331,15 @@ class WorkbookGateway:
             wb=load_workbook(self.path)
             try:
                 task_rows=self._sheet_rows(wb['TASKS'])
-                tasks_by_id={str(row.get('Task ID')):row for row in task_rows if row.get('Task ID')}
-                consequential=[]
-                prepared=[]
-                for raw in task_changes:
-                    change={**raw,'Workload Event ID':raw.get('Workload Event ID') or event_id_value}
-                    current=tasks_by_id.get(str(change.get('Task ID') or ''))
-                    if current and is_consequential_task_change(current,change):
-                        consequential.append(str(current['Task ID']))
-                    if current:
-                        change={'Definition of Done':current.get('Definition of Done'),**change}
-                    elif not change.get('Task ID'):
-                        match=next((row for row in task_rows if equivalent_task(row,change)),None)
-                        if match:
-                            change={**change,'Task ID':match['Task ID']}
-                        else:
-                            change={**change,'Task ID':task_id(
-                                str(change.get('Application ID') or ''),str(change.get('Category') or ''),
-                                str(change.get('Task Title') or ''),str(change.get('Assigned Date') or ''),
-                            )}
-                    prepared.append(change)
+                resolved=resolve_replan_changes(task_rows,task_changes,event_id=event_id_value)
+                consequential=resolved['consequential_task_ids']
+                prepared=resolved['prepared']
                 if consequential and str(event.get('Consequential Approval') or '').upper() != 'YES':
                     raise ValueError(f'Consequential task changes require explicit approval: {consequential}')
                 existing_event=next((r for r in self._sheet_rows(wb['WORKLOAD_EVENTS']) if r.get('Event ID')==event_id_value),None)
                 event={
                     **event,
-                    'Affected Task IDs':'; '.join(str(row.get('Task ID')) for row in prepared if row.get('Task ID')),
+                    'Affected Task IDs':'; '.join(resolved['affected_task_ids']),
                     'Created At':(existing_event or {}).get('Created At') or now,
                     'Updated At':now,
                 }
